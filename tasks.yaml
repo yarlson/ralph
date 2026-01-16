@@ -776,7 +776,7 @@ tasks:
       - Detect repeated same failure (configurable threshold)
       - Detect file churn (same files modified repeatedly without progress)
       - Return GutterStatus with reason
-    status: open
+    status: completed
     acceptance:
       - "Repeated failure detection works"
       - "File churn detection works"

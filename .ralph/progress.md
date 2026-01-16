@@ -564,3 +564,30 @@
 - TDD approach: wrote 25 tests first covering defaults, limits, tracker operations, persistence, and edge cases
 
 **Outcome**: Success - all 51 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: loop-controller-gutter (Gutter Detection)
+
+**What changed:**
+- Implemented gutter detection in `internal/loop/gutter.go`
+- Created `GutterReason` type with values: none, repeated_failure, file_churn, oscillation
+- Created `GutterConfig` struct with configurable thresholds: MaxSameFailure, MaxChurnIterations, ChurnThreshold
+- Created `GutterStatus` struct for detection results: InGutter, Reason, Description
+- Created `GutterState` struct for persistence: FailureSignatures, FileChanges
+- Implemented `GutterDetector` with methods: `NewGutterDetector()`, `RecordIteration()`, `Check()`, `Reset()`, `GetState()`, `SetState()`
+- Implemented `ComputeFailureSignature()` that hashes verification failure outputs using SHA256
+- Repeated failure detection: tracks failure signature occurrences and triggers when threshold exceeded
+- File churn detection: tracks files changed across recent iterations and triggers when same file modified repeatedly
+- `DefaultGutterConfig()` returns sensible defaults (3 same failures, 5 churn iterations, 3 churn threshold)
+- Zero values for thresholds disable that detection type
+
+**Files touched:**
+- `internal/loop/gutter.go` (new)
+- `internal/loop/gutter_test.go` (new)
+
+**Learnings:**
+- Use SHA256 hash of sorted failure outputs for consistent signature computation
+- Churn detection needs to track file changes across a sliding window of recent iterations (not all time)
+- Copy maps and slices in GetState/SetState to prevent external mutation of internal state
+- TDD approach: wrote 24 tests first covering GutterReason validity, config defaults, detector creation, failure signatures, repeated failure detection, file churn detection, reset, state persistence, and disabled detection
+
+**Outcome**: Success - all 69 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
