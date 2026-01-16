@@ -680,7 +680,7 @@ tasks:
       - ArchiveProgress moves current progress.md to .ralph/archive/
       - Names archived files with timestamp
       - Called when starting new feature
-    status: open
+    status: completed
     acceptance:
       - "Archive function moves file correctly"
       - "Timestamp in archived filename"

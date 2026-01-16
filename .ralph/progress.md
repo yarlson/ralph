@@ -489,3 +489,27 @@
 - TDD approach: wrote 21 comprehensive tests covering init, append, patterns extraction/update, size enforcement, and formatting
 
 **Outcome**: Success - all 21 memory tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: memory-manager-archive (Progress Archive)
+
+**What changed:**
+- Implemented `ProgressArchive` struct in `internal/memory/archive.go` for archiving progress files
+- `NewProgressArchive(archiveDir)` constructor creates archive manager with configurable directory
+- `Archive(progressPath)` moves progress file to archive directory with timestamped filename
+- Generates unique archive filenames with format: `progress-YYYYMMDD-HHMMSS.md`
+- Handles filename collisions by appending counter suffix (e.g., `progress-20260116-143022-1.md`)
+- `ListArchives()` returns list of archived files, sorted newest first
+- `ArchiveDir()` getter for the archive directory path
+- Creates archive directory if it doesn't exist
+
+**Files touched:**
+- `internal/memory/archive.go` (new)
+- `internal/memory/archive_test.go` (new)
+
+**Learnings:**
+- Second-precision timestamps can cause collisions in rapid-fire tests; handle by appending counter suffix
+- Use `os.IsNotExist(err)` for file existence checks rather than `errors.Is(err, os.ErrNotExist)` when working with `os.Stat` errors
+- Archive pattern: read source, write to destination, then remove source (safer than rename which may fail across filesystems)
+- TDD approach: wrote 17 tests first covering archive creation, timestamp in filename, directory creation, error handling, multiple archives, and listing
+
+**Outcome**: Success - all 35 memory tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
