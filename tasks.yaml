@@ -1065,7 +1065,7 @@ tasks:
       - Include git diff stat and changed files
       - Enforce size limits
       - Build system prompt with harness instructions
-    status: open
+    status: completed
     acceptance:
       - "All required context included"
       - "Size limits enforced"

@@ -858,3 +858,35 @@
 - TDD approach: wrote 10 tests first covering command structure, flags, error cases, report display, blocked tasks, iteration stats, file output, directory creation, and empty reports
 
 **Outcome**: Success - all tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: prompt-packager-iteration (Iteration Prompt Builder)
+
+**What changed:**
+- Created `internal/prompt` package for prompt packaging for Claude Code iterations
+- Implemented `IterationContext` struct with all required context fields: Task, CodebasePatterns, DiffStat, ChangedFiles, FailureOutput, UserFeedback, IsRetry
+- Implemented `SizeOptions` struct with configurable size limits: MaxPromptBytes, MaxPatternsBytes, MaxDiffBytes, MaxFailureBytes
+- Implemented `Builder` struct with `NewBuilder(opts)` constructor
+- Implemented `BuildSystemPrompt()` that returns harness instructions for Claude (role, rules, completion criteria)
+- Implemented `BuildUserPrompt(ctx)` that builds the user prompt with:
+  - Task title and description
+  - Acceptance criteria (if present)
+  - Verification commands (if present)
+  - Codebase Patterns (if present, with size truncation)
+  - Git status with diff stat and changed files (if present, with size truncation)
+  - Instructions section
+- Implemented `Build(ctx)` convenience method returning both system and user prompts
+- Implemented `truncateWithMarker()` helper that truncates strings to max bytes with "... [truncated]" marker
+- Added `DefaultSizeOptions()` with sensible defaults (8KB prompt, 2KB patterns, 1KB diff, 2KB failure)
+- Added `Validate()` method on SizeOptions to check for negative values
+
+**Files touched:**
+- `internal/prompt/iteration.go` (new)
+- `internal/prompt/iteration_test.go` (new)
+
+**Learnings:**
+- Use `strings.Builder` with `fmt.Fprintf(&sb, ...)` for efficient string building with linter compliance
+- Zero value for size limits means unlimited (no truncation) - useful for testing without limits
+- Separate system prompt (harness instructions) from user prompt (task context) for clear Claude invocation
+- TDD approach: wrote 20 tests first covering struct defaults, all fields, validation, builder construction, system prompt content, user prompt with minimal/full task, size limits, empty sections, and convenience Build method
+
+**Outcome**: Success - all 20 prompt tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
