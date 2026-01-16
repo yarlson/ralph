@@ -74,6 +74,9 @@ type IterationRecord struct {
 
 	// Feedback contains failure information or user feedback for retry.
 	Feedback string `json:"feedback,omitempty"`
+
+	// AttemptNumber is the retry attempt number (1 for first attempt, 2 for first retry, etc.).
+	AttemptNumber int `json:"attempt_number,omitempty"`
 }
 
 // ClaudeInvocationMeta contains metadata about a Claude Code invocation.

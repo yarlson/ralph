@@ -1119,3 +1119,41 @@
 - Empty slice `[]string{}` as default parameter value maintains backward compatibility for existing tests
 
 **Outcome**: Success - all tests pass (52 claude tests including 3 new ones), acceptance criteria met: config command and args both used, empty args handled correctly, unit tests verify command construction
+
+### 2026-01-16: ralph-align-task-status (Implement Task Status Transitions)
+
+**What changed:**
+
+- Added `AttemptNumber` field to `IterationRecord` struct to track retry attempts
+- Added `MaxRetries` field to `LoopConfig` with default value of 2
+- Added `maxRetries` and `taskAttempts` fields to `Controller` struct for tracking per-task retry counts
+- Implemented `SetMaxRetries()` method to configure max retries per task
+- Implemented `handleTaskFailure()` helper method that sets task status to:
+  - `failed` when attempts exceed maxRetries (max retries exhausted)
+  - `open` when attempts are within limit (still have retries left)
+- Modified `runIteration()` to:
+  - Track attempt number at start of each iteration
+  - Set attempt number in iteration record
+  - Call `handleTaskFailure()` on all failure paths (Claude error, no changes, verification failure, commit failure)
+  - Clear attempt counter on success
+- Modified `RunLoop()` to set `blocked` status on gutter detection by finding in-progress task
+- Updated `cmd/run.go` to call `SetMaxRetries()` with config value
+
+**Files touched:**
+
+- `internal/loop/record.go` (added AttemptNumber field)
+- `internal/config/config.go` (added MaxRetries to LoopConfig, set default to 2)
+- `internal/loop/controller.go` (added retry tracking, status transition logic)
+- `cmd/run.go` (added SetMaxRetries call)
+- `tasks.yaml` (marked ralph-align-task-status as completed)
+
+**Learnings:**
+
+- maxRetries represents number of retries allowed after initial attempt (maxRetries=2 means 3 total attempts)
+- Use `>` comparison (not `>=`) when checking if attempts exceed maxRetries
+- Tracking attempt count in Controller state allows per-task retry tracking without modifying Task model
+- Clear attempt counter on success to reset for potential future failures
+- Gutter detection should mark in-progress tasks as blocked, not just return outcome
+- Task status transitions: open -> in_progress -> (on failure: open/failed based on retries OR on success: completed)
+
+**Outcome**: Success - all tests pass, acceptance criteria met: tasks failing max retries marked failed, gutter detection sets blocked status, retry attempt tracking implemented

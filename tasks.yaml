@@ -140,7 +140,7 @@ tasks:
       Modify internal/loop/controller.go to set failed status when max retries
       exceeded and blocked status on gutter detection.
       Track attempt count in iteration state or task metadata.
-    status: open
+    status: completed
     acceptance:
       - "Tasks failing max retries are marked failed"
       - "Tasks hitting gutter detection are marked blocked"

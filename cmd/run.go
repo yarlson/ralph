@@ -165,6 +165,9 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 	}
 	controller.SetGutterConfig(gutterConfig)
 
+	// Configure max retries
+	controller.SetMaxRetries(cfg.Loop.MaxRetries)
+
 	// Set up context with signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

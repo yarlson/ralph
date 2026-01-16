@@ -110,6 +110,8 @@ type Controller struct {
 	gutter *GutterDetector
 
 	lastCompleted *taskstore.Task
+	maxRetries    int
+	taskAttempts  map[string]int // tracks attempt count per task ID
 }
 
 // NewController creates a new loop controller with the given dependencies.
@@ -124,6 +126,8 @@ func NewController(deps ControllerDeps) *Controller {
 		progressFile: deps.ProgressFile,
 		budget:       NewBudgetTracker(DefaultBudgetLimits()),
 		gutter:       NewGutterDetector(DefaultGutterConfig()),
+		maxRetries:   2, // default
+		taskAttempts: make(map[string]int),
 	}
 }
 
@@ -135,6 +139,11 @@ func (c *Controller) SetBudgetLimits(limits BudgetLimits) {
 // SetGutterConfig sets the gutter detection configuration.
 func (c *Controller) SetGutterConfig(config GutterConfig) {
 	c.gutter = NewGutterDetector(config)
+}
+
+// SetMaxRetries sets the maximum number of retries per task.
+func (c *Controller) SetMaxRetries(maxRetries int) {
+	c.maxRetries = maxRetries
 }
 
 // RunLoop executes the main iteration loop until completion, blocked, or budget exceeded.
@@ -169,6 +178,19 @@ func (c *Controller) RunLoop(ctx context.Context, parentTaskID string) RunResult
 		// Check gutter before iteration
 		gutterStatus := c.gutter.Check()
 		if gutterStatus.InGutter {
+			// Mark the last attempted task as blocked if it exists
+			if c.lastCompleted != nil {
+				// Find the task that's stuck (last in-progress task)
+				tasks, err := c.taskStore.List()
+				if err == nil {
+					for _, t := range tasks {
+						if t.Status == taskstore.StatusInProgress {
+							_ = c.taskStore.UpdateStatus(t.ID, taskstore.StatusBlocked)
+							break
+						}
+					}
+				}
+			}
 			result.Outcome = RunOutcomeGutterDetected
 			result.Message = gutterStatus.Description
 			result.ElapsedTime = time.Since(startTime)
@@ -317,6 +339,10 @@ func (c *Controller) RunOnce(ctx context.Context, parentTaskID string) RunResult
 func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *IterationRecord {
 	record := NewIterationRecord(task.ID)
 
+	// Track attempt number
+	c.taskAttempts[task.ID]++
+	record.AttemptNumber = c.taskAttempts[task.ID]
+
 	// Get base commit
 	baseCommit, err := c.gitManager.GetCurrentCommit(ctx)
 	if err == nil {
@@ -338,7 +364,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	if err != nil {
 		record.Complete(OutcomeFailed)
 		record.SetFeedback(fmt.Sprintf("Claude invocation failed: %v", err))
-		_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusOpen) // Reset to open
+		c.handleTaskFailure(task.ID)
 		return record
 	}
 
@@ -356,7 +382,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	if err != nil || !hasChanges {
 		record.Complete(OutcomeFailed)
 		record.SetFeedback("No changes made by Claude")
-		_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusOpen)
+		c.handleTaskFailure(task.ID)
 		return record
 	}
 
@@ -370,7 +396,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		if err != nil {
 			record.Complete(OutcomeFailed)
 			record.SetFeedback(fmt.Sprintf("Verification error: %v", err))
-			_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusOpen)
+			c.handleTaskFailure(task.ID)
 			return record
 		}
 
@@ -388,7 +414,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		if !record.AllPassed() {
 			record.Complete(OutcomeFailed)
 			record.SetFeedback(c.formatVerificationFeedback(results))
-			_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusOpen)
+			c.handleTaskFailure(task.ID)
 			return record
 		}
 	}
@@ -399,14 +425,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	if err != nil {
 		record.Complete(OutcomeFailed)
 		record.SetFeedback(fmt.Sprintf("Commit failed: %v", err))
-		_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusOpen)
+		c.handleTaskFailure(task.ID)
 		return record
 	}
 
 	record.ResultCommit = commitHash
 
-	// Mark task completed
+	// Mark task completed and reset attempt counter
 	_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusCompleted)
+	delete(c.taskAttempts, task.ID) // Clear attempt count on success
 
 	// Update progress file
 	if c.progressFile != nil {
@@ -493,6 +520,20 @@ func (c *Controller) hasIncompleteDescendants(tasks []*taskstore.Task, parentID 
 	}
 
 	return false
+}
+
+// handleTaskFailure handles a task failure, setting the appropriate status based on retry count.
+func (c *Controller) handleTaskFailure(taskID string) {
+	attempts := c.taskAttempts[taskID]
+	// maxRetries is the number of retries allowed (not counting the initial attempt)
+	// So if maxRetries=2, we allow: 1 initial + 2 retries = 3 total attempts
+	if attempts > c.maxRetries {
+		// Max retries exhausted - mark as failed
+		_ = c.taskStore.UpdateStatus(taskID, taskstore.StatusFailed)
+	} else {
+		// Still have retries left - reset to open
+		_ = c.taskStore.UpdateStatus(taskID, taskstore.StatusOpen)
+	}
 }
 
 // GetSummary returns a summary of task status for the given parent task.
