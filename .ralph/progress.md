@@ -1302,3 +1302,45 @@
 
 **Outcome**: Success - task was already complete, all verification commands pass (go test ./internal/memory/...)
 
+### 2026-01-16: ralph-align-retry-loop (Implement In-Iteration Retry Loop)
+
+**What changed:**
+
+- Added `MaxVerificationRetries` field to `LoopConfig` with default value of 2
+- Added `maxVerificationRetries` field to `Controller` struct
+- Implemented `SetMaxVerificationRetries()` method for configuration
+- Modified `runIteration()` to implement in-iteration verification retry loop:
+  - After verification fails, builds retry prompt with failure context using `buildRetryPromptForVerificationFailure()`
+  - Invokes Claude again with `Continue: true` to fix in same session
+  - Re-runs verification after each fix attempt
+  - Repeats up to `maxVerificationRetries` times (default 2)
+  - Accumulates Claude costs and token usage across all retry attempts within iteration
+  - Updates changed files list after each retry
+- Implemented `buildRetryPromptForVerificationFailure()` helper method that:
+  - Loads user feedback from `.ralph/state/feedback-<task-id>.txt` if exists
+  - Computes failure signature from current verification results
+  - Trims failure output using `verifier.TrimOutputForFeedback()`
+  - Builds retry context and generates retry prompts
+- Updated `cmd/run.go` to call `SetMaxVerificationRetries()` from config
+- Config default set to `loop.max_verification_retries: 2`
+
+**Files touched:**
+
+- `internal/config/config.go` (added MaxVerificationRetries field and default)
+- `internal/loop/controller.go` (modified runIteration, added retry loop logic, added buildRetryPromptForVerificationFailure method)
+- `cmd/run.go` (added SetMaxVerificationRetries call)
+- `tasks.yaml` (marked ralph-align-retry-loop as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- In-iteration retries differ from cross-iteration retries: in-iteration retries use `Continue: true` to stay in same Claude session, while cross-iteration retries start fresh
+- The `maxVerificationRetries` config controls how many fix attempts Claude gets within a single iteration after initial verification failure
+- Need to accumulate costs and token usage across all Claude invocations within the iteration for accurate budget tracking
+- The loop condition `verificationAttempt <= c.maxVerificationRetries+1` accounts for: 1 initial attempt + N retries
+- Changed files list should be updated after each retry since Claude may modify additional files during fix attempts
+- Retry prompt building for in-iteration failures uses current verification results rather than loading from previous iteration records
+- The feature enables Claude to fix verification failures immediately without ending the iteration, improving success rate
+
+**Outcome**: Success - all tests pass (go test ./...), feature fully implemented with config support, in-iteration retry loop functional
+

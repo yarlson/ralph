@@ -168,6 +168,7 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 
 	// Configure max retries
 	controller.SetMaxRetries(cfg.Loop.MaxRetries)
+	controller.SetMaxVerificationRetries(cfg.Loop.MaxVerificationRetries)
 
 	// Set up context with signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

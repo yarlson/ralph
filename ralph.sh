@@ -74,14 +74,41 @@ banner() {
     shift
     local title="$1"
     shift
-    local now
+    local now width cols line left right pad spaces
     now="$(date '+%Y-%m-%d %H:%M:%S')"
-    printf '\n%s%s%s\n' "${color}${C_BOLD}" "================================================================================" "${C_RESET}"
-    printf '%s%s%s %s%s\n' "${color}${C_BOLD}" "RALPH" "${C_RESET}" "${color}${C_BOLD}${title}${C_RESET}" "${C_DIM}(${now})${C_RESET}"
-    if [[ $# -gt 0 ]]; then
-        printf '%s\n' "$*"
+
+    width=72
+    if have_cmd tput; then
+        cols="$(tput cols 2>/dev/null || echo 0)"
+        if [[ "$cols" =~ ^[0-9]+$ ]] && [ "$cols" -ge 60 ]; then
+            width="$cols"
+        fi
     fi
-    printf '%s%s%s\n\n' "${color}${C_BOLD}" "================================================================================" "${C_RESET}"
+    if [ "$width" -gt 96 ]; then
+        width=96
+    fi
+
+    line="$(printf '%*s' "$width" '')"
+    line="${line// /-}"
+
+    left="RALPH ${title}"
+    right="(${now})"
+    pad=$((width - 2 - ${#left} - ${#right}))
+    if [ "$pad" -lt 1 ]; then
+        pad=1
+    fi
+    spaces="$(printf '%*s' "$pad" '')"
+
+    printf '\n%s%s%s\n' "${C_DIM}" "$line" "${C_RESET}"
+    printf '  %s%s%s %s%s%s%s%s%s\n' \
+        "${color}${C_BOLD}" "RALPH" "${C_RESET}" \
+        "${color}${C_BOLD}" "$title" "${C_RESET}" \
+        "$spaces" \
+        "${C_DIM}" "$right" "${C_RESET}"
+    if [[ $# -gt 0 ]]; then
+        printf '  %s%s%s\n' "${C_DIM}" "$*" "${C_RESET}"
+    fi
+    printf '%s%s%s\n\n' "${C_DIM}" "$line" "${C_RESET}"
 }
 
 fmt_duration() {

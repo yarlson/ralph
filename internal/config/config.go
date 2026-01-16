@@ -52,6 +52,7 @@ type LoopConfig struct {
 	MaxIterations          int          `mapstructure:"max_iterations"`
 	MaxMinutesPerIteration int          `mapstructure:"max_minutes_per_iteration"`
 	MaxRetries             int          `mapstructure:"max_retries"`
+	MaxVerificationRetries int          `mapstructure:"max_verification_retries"`
 	Gutter                 GutterConfig `mapstructure:"gutter"`
 }
 
@@ -168,6 +169,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("loop.max_iterations", 50)
 	v.SetDefault("loop.max_minutes_per_iteration", 20)
 	v.SetDefault("loop.max_retries", 2)
+	v.SetDefault("loop.max_verification_retries", 2)
 	v.SetDefault("loop.gutter.max_same_failure", 3)
 	v.SetDefault("loop.gutter.max_churn_commits", 2)
 

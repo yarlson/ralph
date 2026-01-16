@@ -299,7 +299,7 @@ tasks:
       After Claude run, if verification fails, build retry prompt and
       invoke Claude again with --continue. Repeat up to max_verification_retries.
       Add loop.max_verification_retries to config (default 2).
-    status: open
+    status: completed
     acceptance:
       - "Claude gets chances to fix verification failures"
       - "Retry prompts are fix-only focused"

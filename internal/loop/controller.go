@@ -115,26 +115,28 @@ type Controller struct {
 	budget *BudgetTracker
 	gutter *GutterDetector
 
-	lastCompleted *taskstore.Task
-	maxRetries    int
-	taskAttempts  map[string]int // tracks attempt count per task ID
+	lastCompleted          *taskstore.Task
+	maxRetries             int
+	maxVerificationRetries int
+	taskAttempts           map[string]int // tracks attempt count per task ID
 }
 
 // NewController creates a new loop controller with the given dependencies.
 func NewController(deps ControllerDeps) *Controller {
 	return &Controller{
-		taskStore:    deps.TaskStore,
-		claudeRunner: deps.Claude,
-		verifier:     deps.Verifier,
-		gitManager:   deps.Git,
-		logsDir:      deps.LogsDir,
-		progressDir:  deps.ProgressDir,
-		progressFile: deps.ProgressFile,
-		workDir:      deps.WorkDir,
-		budget:       NewBudgetTracker(DefaultBudgetLimits()),
-		gutter:       NewGutterDetector(DefaultGutterConfig()),
-		maxRetries:   2, // default
-		taskAttempts: make(map[string]int),
+		taskStore:              deps.TaskStore,
+		claudeRunner:           deps.Claude,
+		verifier:               deps.Verifier,
+		gitManager:             deps.Git,
+		logsDir:                deps.LogsDir,
+		progressDir:            deps.ProgressDir,
+		progressFile:           deps.ProgressFile,
+		workDir:                deps.WorkDir,
+		budget:                 NewBudgetTracker(DefaultBudgetLimits()),
+		gutter:                 NewGutterDetector(DefaultGutterConfig()),
+		maxRetries:             2, // default
+		maxVerificationRetries: 2, // default
+		taskAttempts:           make(map[string]int),
 	}
 }
 
@@ -151,6 +153,11 @@ func (c *Controller) SetGutterConfig(config GutterConfig) {
 // SetMaxRetries sets the maximum number of retries per task.
 func (c *Controller) SetMaxRetries(maxRetries int) {
 	c.maxRetries = maxRetries
+}
+
+// SetMaxVerificationRetries sets the maximum number of verification retries within an iteration.
+func (c *Controller) SetMaxVerificationRetries(maxVerificationRetries int) {
+	c.maxVerificationRetries = maxVerificationRetries
 }
 
 // checkPaused checks if the loop has been paused by reading the pause flag file.
@@ -362,7 +369,7 @@ func (c *Controller) RunOnce(ctx context.Context, parentTaskID string) RunResult
 	return result
 }
 
-// runIteration executes a single task iteration.
+// runIteration executes a single task iteration with in-iteration retry loop for verification failures.
 func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *IterationRecord {
 	record := NewIterationRecord(task.ID)
 
@@ -388,7 +395,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		return record
 	}
 
-	// Invoke Claude
+	// Invoke Claude (initial attempt)
 	req := claude.ClaudeRequest{
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
@@ -402,7 +409,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		return record
 	}
 
-	// Record Claude metadata
+	// Record Claude metadata (accumulate costs across retries)
 	record.ClaudeInvocation = ClaudeInvocationMeta{
 		SessionID:    resp.SessionID,
 		Model:        resp.Model,
@@ -424,28 +431,77 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	changedFiles, _ := c.gitManager.GetChangedFiles(ctx)
 	record.FilesChanged = changedFiles
 
-	// Run verification
+	// Run verification with retry loop
+	var results []verifier.VerificationResult
+	verificationPassed := false
+	verificationAttempt := 1
+
 	if len(task.Verify) > 0 {
-		results, err := c.verifier.Verify(ctx, task.Verify)
-		if err != nil {
-			record.Complete(OutcomeFailed)
-			record.SetFeedback(fmt.Sprintf("Verification error: %v", err))
-			c.handleTaskFailure(task.ID)
-			return record
+		for verificationAttempt <= c.maxVerificationRetries+1 {
+			// Run verification
+			results, err = c.verifier.Verify(ctx, task.Verify)
+			if err != nil {
+				record.Complete(OutcomeFailed)
+				record.SetFeedback(fmt.Sprintf("Verification error: %v", err))
+				c.handleTaskFailure(task.ID)
+				return record
+			}
+
+			// Convert to VerificationOutput
+			record.VerificationOutputs = []VerificationOutput{} // Reset for each attempt
+			for _, r := range results {
+				record.VerificationOutputs = append(record.VerificationOutputs, VerificationOutput{
+					Command:  r.Command,
+					Passed:   r.Passed,
+					Output:   r.Output,
+					Duration: r.Duration,
+				})
+			}
+
+			// Check if all passed
+			if record.AllPassed() {
+				verificationPassed = true
+				break
+			}
+
+			// If this was the last allowed attempt, fail
+			if verificationAttempt > c.maxVerificationRetries {
+				break
+			}
+
+			// Build retry prompt with failure context
+			systemPrompt, userPrompt, err = c.buildRetryPromptForVerificationFailure(ctx, task, results, verificationAttempt)
+			if err != nil {
+				// If we can't build retry prompt, fail with current results
+				break
+			}
+
+			// Invoke Claude again with --continue to fix in same session
+			retryReq := claude.ClaudeRequest{
+				SystemPrompt: systemPrompt,
+				Prompt:       userPrompt,
+				Continue:     true, // Continue in the same session
+			}
+
+			retryResp, err := c.claudeRunner.Run(ctx, retryReq)
+			if err != nil {
+				// If retry fails, break and use current verification results
+				break
+			}
+
+			// Accumulate Claude costs and tokens across retries
+			record.ClaudeInvocation.TotalCostUSD += retryResp.TotalCostUSD
+			record.ClaudeInvocation.InputTokens += retryResp.Usage.InputTokens
+			record.ClaudeInvocation.OutputTokens += retryResp.Usage.OutputTokens
+
+			// Update changed files (Claude may have modified more files)
+			changedFiles, _ = c.gitManager.GetChangedFiles(ctx)
+			record.FilesChanged = changedFiles
+
+			verificationAttempt++
 		}
 
-		// Convert to VerificationOutput
-		for _, r := range results {
-			record.VerificationOutputs = append(record.VerificationOutputs, VerificationOutput{
-				Command:  r.Command,
-				Passed:   r.Passed,
-				Output:   r.Output,
-				Duration: r.Duration,
-			})
-		}
-
-		// Check if all passed
-		if !record.AllPassed() {
+		if !verificationPassed {
 			record.Complete(OutcomeFailed)
 			record.SetFeedback(c.formatVerificationFeedback(results))
 			c.handleTaskFailure(task.ID)
@@ -535,7 +591,7 @@ func (c *Controller) buildInitialPrompt(ctx context.Context, task *taskstore.Tas
 	return result.SystemPrompt, result.UserPrompt, nil
 }
 
-// buildRetryPrompt builds the prompt for a retry attempt after verification failure.
+// buildRetryPrompt builds the prompt for a retry attempt after verification failure (between iterations).
 func (c *Controller) buildRetryPrompt(ctx context.Context, task *taskstore.Task, attemptNumber int, builder *prompt.Builder) (string, string, error) {
 	// Load user feedback if it exists
 	var userFeedback string
@@ -573,6 +629,52 @@ func (c *Controller) buildRetryPrompt(ctx context.Context, task *taskstore.Task,
 			}
 		}
 	}
+
+	// Build retry context
+	retryCtx := prompt.RetryContext{
+		Task:             task,
+		FailureOutput:    failureOutput,
+		FailureSignature: failureSignature,
+		UserFeedback:     userFeedback,
+		AttemptNumber:    attemptNumber,
+	}
+
+	// Build retry prompts
+	result, err := builder.BuildRetry(retryCtx)
+	if err != nil {
+		return "", "", err
+	}
+
+	return result.SystemPrompt, result.UserPrompt, nil
+}
+
+// buildRetryPromptForVerificationFailure builds the prompt for an in-iteration verification retry.
+func (c *Controller) buildRetryPromptForVerificationFailure(ctx context.Context, task *taskstore.Task, results []verifier.VerificationResult, attemptNumber int) (string, string, error) {
+	builder := prompt.NewBuilder(nil)
+
+	// Load user feedback if it exists (unlikely for in-iteration retries but check anyway)
+	var userFeedback string
+	if c.workDir != "" {
+		feedbackPath := filepath.Join(state.StateDirPath(c.workDir), fmt.Sprintf("feedback-%s.txt", task.ID))
+		if feedbackBytes, err := os.ReadFile(feedbackPath); err == nil {
+			userFeedback = string(feedbackBytes)
+		}
+	}
+
+	// Compute failure signature from current results
+	var verificationOutputs []VerificationOutput
+	for _, r := range results {
+		verificationOutputs = append(verificationOutputs, VerificationOutput{
+			Command:  r.Command,
+			Passed:   r.Passed,
+			Output:   r.Output,
+			Duration: r.Duration,
+		})
+	}
+	failureSignature := ComputeFailureSignature(verificationOutputs)
+
+	// Trim failure output
+	failureOutput := verifier.TrimOutputForFeedback(results, verifier.DefaultTrimOptions())
 
 	// Build retry context
 	retryCtx := prompt.RetryContext{
