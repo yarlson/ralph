@@ -338,3 +338,27 @@
 - `VerifyTask` takes commands directly ([][]string) rather than *Task to avoid coupling verifier package to taskstore package - keeps interface clean and testable
 
 **Outcome**: Success - all 9 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: verifier-command-runner (Command Runner)
+
+**What changed:**
+- Implemented `CommandRunner` struct in `internal/verifier/runner.go` that implements the `Verifier` interface
+- `NewCommandRunner(workDir)` constructor creates runner with optional working directory
+- Commands executed as subprocesses using `exec.CommandContext` for context-aware timeout/cancellation
+- Combined stdout/stderr captured in output using `bytes.Buffer`
+- Supports command allowlist via `SetAllowedCommands()` - blocked commands return failure with descriptive error
+- Supports output size limits via `SetMaxOutputSize()` - truncates large output with marker
+- Sequential command execution - continues even after failed commands
+- Proper handling of edge cases: empty commands, non-existent commands, context cancellation
+
+**Files touched:**
+- `internal/verifier/runner.go` (new)
+- `internal/verifier/runner_test.go` (new)
+
+**Learnings:**
+- Use `exec.CommandContext` for subprocess execution with automatic process termination on context cancellation
+- Allowlist should check base command name only (e.g., "go" in "go test ./...")
+- Return failure result with descriptive output rather than error for blocked/invalid commands - keeps sequential execution intact
+- Default 1MB max output size is reasonable; truncation preserves beginning and adds marker at end
+
+**Outcome**: Success - all 28 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

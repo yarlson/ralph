@@ -507,7 +507,7 @@ tasks:
       - Respect context timeout
       - Check against command allowlist (safety)
       - Return structured result with timing
-    status: open
+    status: completed
     acceptance:
       - "Commands executed sequentially"
       - "Output captured with size limits"
