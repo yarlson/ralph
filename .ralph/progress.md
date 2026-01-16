@@ -225,3 +225,25 @@
 - TDD approach: wrote 17 comprehensive tests covering empty/single/multiple leaves, area preference, fallback ordering, deep hierarchies, and dependencies
 
 **Outcome**: Success - all 49 selector tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: claude-runner-interface (ClaudeRunner Interface)
+
+**What changed:**
+- Created `internal/claude` package for Claude Code integration
+- Implemented `ClaudeRequest` struct with fields: Cwd, SystemPrompt, AllowedTools, Prompt, Continue, ExtraArgs, Env
+- Implemented `ClaudeResponse` struct with fields: SessionID, Model, Version, FinalText, StreamText, Usage, TotalCostUSD, PermissionDenials, RawEventsPath
+- Implemented `ClaudeUsage` struct for token usage statistics: InputTokens, OutputTokens, CacheCreationTokens, CacheReadTokens
+- Defined `Runner` interface with `Run(ctx, req) (*ClaudeResponse, error)` method
+- All types have JSON tags for logging and serialization
+
+**Files touched:**
+- `internal/claude/runner.go` (new)
+- `internal/claude/runner_test.go` (new)
+
+**Learnings:**
+- Interface naming: `Runner` instead of `ClaudeRunner` to avoid stutter in package (`claude.Runner` vs `claude.ClaudeRunner`)
+- The CLAUDE-CODE.md spec defines the exact contract for request/response types - follow it closely
+- Context parameter in interface allows for cancellation/timeout support
+- TDD approach: wrote 10 tests first covering struct defaults, all fields, JSON serialization, and interface implementation via mock
+
+**Outcome**: Success - all 10 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

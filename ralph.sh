@@ -62,12 +62,15 @@ while :; do
 
   status="$(printf '%s\n' "$final" | tail -n 1)"
   if [ "$status" = "RALPH_DONE" ]; then
+    say "The project has been completed!"
     exit 0
   fi
   if [ "$status" = "RALPH_BLOCKED" ]; then
     echo "Ralph blocked (no ready tasks)." >&2
+    say "Ralph blocked"
     exit 2
   fi
   gic -y
+  say "Another task done"
 done
 

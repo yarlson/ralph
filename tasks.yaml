@@ -372,7 +372,7 @@ tasks:
       - ClaudeRequest: Cwd, SystemPrompt, AllowedTools, Prompt, Continue, ExtraArgs, Env
       - ClaudeResponse: SessionID, Model, Version, FinalText, StreamText, Usage, TotalCostUSD, PermissionDenials, RawEventsPath
       - ClaudeRunner.Run(ctx, req) -> (*ClaudeResponse, error)
-    status: open
+    status: completed
     acceptance:
       - "Interface and types defined per CLAUDE-CODE.md spec"
       - "Types have JSON tags for logging"
