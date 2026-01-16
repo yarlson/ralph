@@ -58,8 +58,12 @@ type LoopConfig struct {
 
 // GutterConfig holds gutter detection settings
 type GutterConfig struct {
-	MaxSameFailure  int `mapstructure:"max_same_failure"`
-	MaxChurnCommits int `mapstructure:"max_churn_commits"`
+	MaxSameFailure     int  `mapstructure:"max_same_failure"`
+	MaxChurnCommits    int  `mapstructure:"max_churn_commits"`
+	MaxOscillations    int  `mapstructure:"max_oscillations"`
+	EnableContentHash  bool `mapstructure:"enable_content_hash"`
+	MaxChurnIterations int  `mapstructure:"max_churn_iterations"`
+	ChurnThreshold     int  `mapstructure:"churn_threshold"`
 }
 
 // SafetyConfig holds safety and sandbox settings
@@ -172,6 +176,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("loop.max_verification_retries", 2)
 	v.SetDefault("loop.gutter.max_same_failure", 3)
 	v.SetDefault("loop.gutter.max_churn_commits", 2)
+	v.SetDefault("loop.gutter.max_oscillations", 2)
+	v.SetDefault("loop.gutter.enable_content_hash", true)
+	v.SetDefault("loop.gutter.max_churn_iterations", 5)
+	v.SetDefault("loop.gutter.churn_threshold", 3)
 
 	// Safety defaults
 	v.SetDefault("safety.sandbox", false)

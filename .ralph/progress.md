@@ -1628,3 +1628,31 @@
 - Verifier allowlist enforcement was already implemented correctly, just needed to be conditionally enabled
 
 **Outcome**: Success - all tests pass (go test ./..., go build ./...), sandbox mode fully functional with proper gating and tool restrictions
+
+### 2026-01-16: ralph-align-gutter (Improve Gutter Detection)
+
+**What changed:**
+
+- Enhanced gutter detection with oscillation detection for files modified in non-consecutive iterations
+- Added content hash tracking capability to detect file modification patterns
+- Extended GutterConfig with MaxOscillations and EnableContentHash options
+- Implemented checkOscillation() method to detect files repeatedly appearing after gaps
+- Updated GutterState to persist content hashes across sessions
+- Added comprehensive tests for oscillation detection and configuration options
+
+**Files touched:**
+
+- `internal/loop/gutter.go` (modified)
+- `internal/loop/gutter_test.go` (modified)
+- `internal/config/config.go` (modified)
+
+**Learnings:**
+
+- Oscillation detection tracks when files are modified in non-consecutive iterations, indicating "thrashing" behavior
+- Since IterationRecord doesn't contain file content, oscillation is detected by tracking file appearance patterns rather than actual content hashes
+- The enableContentHash flag controls whether oscillation detection is active
+- Oscillation check runs before file churn check to catch more specific patterns first
+- Config defaults: MaxOscillations=2, EnableContentHash=true, MaxChurnIterations=5, ChurnThreshold=3
+- Tests must disable oscillation (or set high threshold) when specifically testing file churn to avoid interference
+
+**Outcome**: Success - all tests pass (go test ./...), build succeeds (go build ./...), linter passes (golangci-lint run)

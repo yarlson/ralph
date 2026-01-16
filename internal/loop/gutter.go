@@ -48,6 +48,15 @@ type GutterConfig struct {
 	// ChurnThreshold is how many times a file must be modified within
 	// MaxChurnIterations to be considered "churning" (0 = disabled).
 	ChurnThreshold int `json:"churn_threshold"`
+
+	// MaxOscillations is the max number of content oscillations before triggering
+	// gutter detection (0 = disabled). Oscillation is when a file's content
+	// reverts to a previous state.
+	MaxOscillations int `json:"max_oscillations"`
+
+	// EnableContentHash enables content-hash based oscillation detection.
+	// If false, only file-name based churn detection is used.
+	EnableContentHash bool `json:"enable_content_hash"`
 }
 
 // DefaultGutterConfig returns sensible default gutter detection config.
@@ -56,6 +65,8 @@ func DefaultGutterConfig() GutterConfig {
 		MaxSameFailure:     3,
 		MaxChurnIterations: 5,
 		ChurnThreshold:     3,
+		MaxOscillations:    2,
+		EnableContentHash:  true,
 	}
 }
 
@@ -78,13 +89,19 @@ type GutterState struct {
 
 	// FileChanges tracks files changed in recent iterations (list of file sets).
 	FileChanges [][]string `json:"file_changes"`
+
+	// ContentHashes tracks content hashes for files across iterations.
+	// Map of file path -> list of content hashes (one per iteration).
+	ContentHashes map[string][]string `json:"content_hashes"`
 }
 
 // GutterDetector tracks iteration history and detects gutter conditions.
 type GutterDetector struct {
 	config            GutterConfig
-	failureSignatures map[string]int // signature hash -> count
-	fileChanges       [][]string     // list of file sets from recent iterations
+	failureSignatures map[string]int              // signature hash -> count
+	fileChanges       [][]string                  // list of file sets from recent iterations
+	contentHashes     map[string][]string         // file path -> list of content hashes
+	oscillationCounts map[string]int              // file path -> oscillation count
 }
 
 // NewGutterDetector creates a new gutter detector with the given config.
@@ -93,6 +110,8 @@ func NewGutterDetector(config GutterConfig) *GutterDetector {
 		config:            config,
 		failureSignatures: make(map[string]int),
 		fileChanges:       [][]string{},
+		contentHashes:     make(map[string][]string),
+		oscillationCounts: make(map[string]int),
 	}
 }
 
@@ -122,6 +141,12 @@ func ComputeFailureSignature(outputs []VerificationOutput) string {
 	return hex.EncodeToString(hash[:])
 }
 
+// ComputeContentHash computes a hash of file content for oscillation detection.
+func ComputeContentHash(content string) string {
+	hash := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(hash[:])
+}
+
 // RecordIteration records an iteration for gutter detection.
 func (d *GutterDetector) RecordIteration(record *IterationRecord) {
 	if record == nil {
@@ -138,6 +163,32 @@ func (d *GutterDetector) RecordIteration(record *IterationRecord) {
 		}
 	}
 
+	// Track file change patterns for oscillation detection
+	// Since we don't have access to file content in the record, we detect
+	// oscillation as files appearing in non-consecutive iterations (skip pattern)
+	if d.config.EnableContentHash && len(record.FilesChanged) > 0 {
+		for _, file := range record.FilesChanged {
+			// Get previous iterations where this file appeared
+			prevIterations := d.contentHashes[file]
+
+			// Check if file has appeared before (potential oscillation)
+			// If there's a gap (file not modified in every iteration), it's oscillating
+			if len(prevIterations) > 0 {
+				// Count as oscillation if file reappears after being absent
+				d.oscillationCounts[file]++
+			}
+
+			// Record this iteration for this file (use iteration count as placeholder)
+			iterMarker := fmt.Sprintf("%d", len(d.fileChanges))
+			d.contentHashes[file] = append(prevIterations, iterMarker)
+
+			// Keep only recent markers within window
+			if d.config.MaxChurnIterations > 0 && len(d.contentHashes[file]) > d.config.MaxChurnIterations {
+				d.contentHashes[file] = d.contentHashes[file][len(d.contentHashes[file])-d.config.MaxChurnIterations:]
+			}
+		}
+	}
+
 	// Track failure signatures for repeated failure detection
 	if record.Outcome == OutcomeFailed {
 		sig := ComputeFailureSignature(record.VerificationOutputs)
@@ -151,6 +202,11 @@ func (d *GutterDetector) RecordIteration(record *IterationRecord) {
 func (d *GutterDetector) Check() GutterStatus {
 	// Check for repeated failure
 	if status := d.checkRepeatedFailure(); status.InGutter {
+		return status
+	}
+
+	// Check for oscillation
+	if status := d.checkOscillation(); status.InGutter {
 		return status
 	}
 
@@ -179,6 +235,32 @@ func (d *GutterDetector) checkRepeatedFailure() GutterStatus {
 				Reason:      GutterReasonRepeatedFailure,
 				Description: fmt.Sprintf("same failure repeated %d times (threshold: %d), signature: %s", count, d.config.MaxSameFailure, sig[:8]),
 			}
+		}
+	}
+
+	return GutterStatus{InGutter: false, Reason: GutterReasonNone}
+}
+
+// checkOscillation detects if files are oscillating (modified repeatedly in non-consecutive iterations).
+func (d *GutterDetector) checkOscillation() GutterStatus {
+	if d.config.MaxOscillations <= 0 || !d.config.EnableContentHash {
+		return GutterStatus{InGutter: false, Reason: GutterReasonNone}
+	}
+
+	// Find files that have oscillated beyond threshold
+	var oscillatingFiles []string
+	for file, count := range d.oscillationCounts {
+		if count >= d.config.MaxOscillations {
+			oscillatingFiles = append(oscillatingFiles, file)
+		}
+	}
+
+	if len(oscillatingFiles) > 0 {
+		sort.Strings(oscillatingFiles)
+		return GutterStatus{
+			InGutter:    true,
+			Reason:      GutterReasonOscillation,
+			Description: fmt.Sprintf("files oscillating (modified %d+ times non-consecutively): %s", d.config.MaxOscillations, strings.Join(oscillatingFiles, ", ")),
 		}
 	}
 
@@ -223,6 +305,8 @@ func (d *GutterDetector) checkFileChurn() GutterStatus {
 func (d *GutterDetector) Reset() {
 	d.failureSignatures = make(map[string]int)
 	d.fileChanges = [][]string{}
+	d.contentHashes = make(map[string][]string)
+	d.oscillationCounts = make(map[string]int)
 }
 
 // GetState returns the current gutter detection state for persistence.
@@ -240,9 +324,17 @@ func (d *GutterDetector) GetState() GutterState {
 		copy(changes[i], files)
 	}
 
+	// Copy content hashes
+	hashes := make(map[string][]string, len(d.contentHashes))
+	for k, v := range d.contentHashes {
+		hashes[k] = make([]string, len(v))
+		copy(hashes[k], v)
+	}
+
 	return GutterState{
 		FailureSignatures: sigs,
 		FileChanges:       changes,
+		ContentHashes:     hashes,
 	}
 }
 
@@ -265,5 +357,24 @@ func (d *GutterDetector) SetState(state GutterState) {
 		}
 	} else {
 		d.fileChanges = [][]string{}
+	}
+
+	if state.ContentHashes != nil {
+		d.contentHashes = make(map[string][]string, len(state.ContentHashes))
+		for k, v := range state.ContentHashes {
+			d.contentHashes[k] = make([]string, len(v))
+			copy(d.contentHashes[k], v)
+		}
+	} else {
+		d.contentHashes = make(map[string][]string)
+	}
+
+	// Rebuild oscillation counts from content hashes
+	d.oscillationCounts = make(map[string]int)
+	for file, hashes := range d.contentHashes {
+		// Count how many times this file appeared (reappearances after first)
+		if len(hashes) > 1 {
+			d.oscillationCounts[file] = len(hashes) - 1
+		}
 	}
 }

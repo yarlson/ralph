@@ -506,7 +506,7 @@ tasks:
       Enhance internal/loop/gutter.go to detect oscillation (files modified
       back and forth using content hash), no-progress commits, and failure
       signatures across iterations. Add gutter config options.
-    status: open
+    status: completed
     acceptance:
       - "Oscillation detected when file changes revert"
       - "Content hash prevents false positives"

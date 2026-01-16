@@ -38,6 +38,8 @@ func TestDefaultGutterConfig(t *testing.T) {
 	assert.Equal(t, 3, cfg.MaxSameFailure, "default MaxSameFailure should be 3")
 	assert.Equal(t, 5, cfg.MaxChurnIterations, "default MaxChurnIterations should be 5")
 	assert.Equal(t, 3, cfg.ChurnThreshold, "default ChurnThreshold should be 3")
+	assert.Equal(t, 2, cfg.MaxOscillations, "default MaxOscillations should be 2")
+	assert.True(t, cfg.EnableContentHash, "default EnableContentHash should be true")
 }
 
 // Test GutterStatus
@@ -244,6 +246,7 @@ func TestGutterDetector_FileChurn(t *testing.T) {
 	cfg := DefaultGutterConfig()
 	cfg.MaxChurnIterations = 3
 	cfg.ChurnThreshold = 2 // same file modified 2+ times counts as churn
+	cfg.MaxOscillations = 10 // Set high so oscillation doesn't trigger first
 	detector := NewGutterDetector(cfg)
 
 	// Record iterations with same files being modified repeatedly
@@ -348,31 +351,34 @@ func TestGutterDetector_Reset(t *testing.T) {
 	assert.Empty(t, detector.fileChanges)
 }
 
-// Test oscillation detection (diff content alternating)
+// Test oscillation detection (file appearing in non-consecutive iterations)
 func TestGutterDetector_Oscillation(t *testing.T) {
 	cfg := DefaultGutterConfig()
+	cfg.MaxOscillations = 2
+	cfg.EnableContentHash = true
 	cfg.MaxChurnIterations = 6
-	cfg.ChurnThreshold = 2
 	detector := NewGutterDetector(cfg)
 
-	// Record alternating changes to same file (A -> B -> A -> B pattern)
-	patterns := []string{"state A", "state B", "state A", "state B", "state A", "state B"}
-	for i, pattern := range patterns {
+	// Record file appearing in non-consecutive iterations (file1, file2, file1, file2, file1)
+	fileSequence := []string{"file1.go", "file2.go", "file1.go", "file3.go", "file1.go"}
+	for i, file := range fileSequence {
 		record := &IterationRecord{
-			IterationID: GenerateIterationID(),
-			TaskID:      "task-1",
-			Outcome:     OutcomeFailed,
-			FilesChanged: []string{"oscillating-file.go"},
+			IterationID:  GenerateIterationID(),
+			TaskID:       "task-1",
+			Outcome:      OutcomeFailed,
+			FilesChanged: []string{file},
 			VerificationOutputs: []VerificationOutput{
-				{Command: []string{"go", "test"}, Passed: false, Output: "FAIL: " + pattern + " " + string(rune('0'+i))},
+				{Command: []string{"go", "test"}, Passed: false, Output: "FAIL: iteration " + string(rune('0'+i))},
 			},
 		}
 		detector.RecordIteration(record)
 	}
 
 	status := detector.Check()
-	// Should detect either oscillation or file churn
-	assert.True(t, status.InGutter, "should detect oscillation/churn pattern")
+	// file1.go appears 3 times (oscillates twice after first appearance)
+	assert.True(t, status.InGutter, "should detect oscillation pattern")
+	assert.Equal(t, GutterReasonOscillation, status.Reason)
+	assert.Contains(t, status.Description, "file1.go")
 }
 
 // Test GetState and SetState
@@ -429,6 +435,8 @@ func TestGutterDetector_Disabled(t *testing.T) {
 		MaxSameFailure:     0,
 		MaxChurnIterations: 0,
 		ChurnThreshold:     0,
+		MaxOscillations:    0,
+		EnableContentHash:  false,
 	}
 	detector := NewGutterDetector(cfg)
 
@@ -448,6 +456,36 @@ func TestGutterDetector_Disabled(t *testing.T) {
 
 	status := detector.Check()
 	assert.False(t, status.InGutter, "gutter detection should be disabled when all thresholds are 0")
+}
+
+// Test oscillation detection disabled when EnableContentHash is false
+func TestGutterDetector_OscillationDisabled(t *testing.T) {
+	cfg := DefaultGutterConfig()
+	cfg.MaxOscillations = 2
+	cfg.EnableContentHash = false // Disable content hash tracking
+	cfg.MaxChurnIterations = 6
+	detector := NewGutterDetector(cfg)
+
+	// Record file appearing multiple times
+	fileSequence := []string{"file1.go", "file2.go", "file1.go", "file2.go", "file1.go"}
+	for i, file := range fileSequence {
+		record := &IterationRecord{
+			IterationID:  GenerateIterationID(),
+			TaskID:       "task-1",
+			Outcome:      OutcomeFailed,
+			FilesChanged: []string{file},
+			VerificationOutputs: []VerificationOutput{
+				{Command: []string{"go", "test"}, Passed: false, Output: "FAIL: iteration " + string(rune('0'+i))},
+			},
+		}
+		detector.RecordIteration(record)
+	}
+
+	status := detector.Check()
+	// Should not detect oscillation when EnableContentHash is false
+	if status.InGutter {
+		assert.NotEqual(t, GutterReasonOscillation, status.Reason, "should not detect oscillation when content hash disabled")
+	}
 }
 
 // Test only failed iterations count for gutter detection
