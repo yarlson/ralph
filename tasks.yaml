@@ -754,7 +754,7 @@ tasks:
       - Load/save from .ralph/state/budget.json
       - CheckBudget returns whether to continue
       - UpdateBudget adds iteration costs
-    status: open
+    status: completed
     acceptance:
       - "Budget state persisted"
       - "All limits checked (iterations, time, cost)"

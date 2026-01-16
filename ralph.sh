@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROMPT="$(
+PROMPT=$(
 	cat <<'EOF'
 Read PRD.md, tasks.yaml, and .ralph/progress.md.
 
@@ -30,7 +30,7 @@ If ALL tasks in tasks.yaml are completed, print RALPH_DONE as the LAST line and 
 If no ready tasks exist but some are incomplete, print RALPH_BLOCKED as the LAST line and stop (include blocked task ids/titles above it).
 Do not ask the user questions. Stop.
 EOF
-)"
+)
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
@@ -45,8 +45,6 @@ if supports_color; then
 	C_RED="$(tput setaf 1)"
 	C_GREEN="$(tput setaf 2)"
 	C_YELLOW="$(tput setaf 3)"
-	C_BLUE="$(tput setaf 4)"
-	C_MAGENTA="$(tput setaf 5)"
 	C_CYAN="$(tput setaf 6)"
 else
 	C_RESET=""
@@ -55,8 +53,6 @@ else
 	C_RED=""
 	C_GREEN=""
 	C_YELLOW=""
-	C_BLUE=""
-	C_MAGENTA=""
 	C_CYAN=""
 fi
 
@@ -69,7 +65,7 @@ banner() {
 	local now
 	now="$(date '+%Y-%m-%d %H:%M:%S')"
 	printf '\n%s%s%s\n' "${color}${C_BOLD}" "================================================================================" "${C_RESET}"
-	printf '%s%s%s %s%s%s\n' "${color}${C_BOLD}" "RALPH" "${C_RESET}" "${color}${C_BOLD}${title}${C_RESET}" "${C_DIM}(${now})${C_RESET}"
+	printf '%s%s%s %s%s\n' "${color}${C_BOLD}" "RALPH" "${C_RESET}" "${color}${C_BOLD}${title}${C_RESET}" "${C_DIM}(${now})${C_RESET}"
 	if [[ $# -gt 0 ]]; then
 		printf '%s\n' "$*"
 	fi

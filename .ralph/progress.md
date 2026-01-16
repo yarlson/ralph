@@ -537,3 +537,30 @@
 - TDD approach: wrote 26 tests first covering outcome validity, record defaults, all fields, JSON serialization, duration calculation, completion, feedback, save/load functionality, and verification pass aggregation
 
 **Outcome**: Success - all 26 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: loop-controller-budget (Budget Tracking)
+
+**What changed:**
+- Implemented budget tracking in `internal/loop/budget.go`
+- Created `BudgetLimits` struct with configurable limits: MaxIterations, MaxTimeMinutes, MaxCostUSD, MaxMinutesPerIteration
+- Created `BudgetState` struct for tracking consumption: Iterations, TotalCostUSD, StartTime
+- Created `BudgetStatus` struct for check results: CanContinue, Reason, ReasonCode
+- Implemented `BudgetTracker` with methods: `NewBudgetTracker()`, `RecordIteration()`, `CheckBudget()`, `GetState()`, `SetState()`, `Reset()`, `ElapsedTime()`
+- Implemented `SaveBudget(path, state)` and `LoadBudget(path)` for persistence to .ralph/state/budget.json
+- Created `BudgetReasonCode` type with values: none, iterations, time, cost
+- `DefaultBudgetLimits()` returns sensible defaults (50 iterations, 20 min per iteration, unlimited time/cost)
+- Zero values for limits mean unlimited - allows flexible configuration
+- Budget checks evaluate in priority order: iterations, time, cost
+
+**Files touched:**
+- `internal/loop/budget.go` (new)
+- `internal/loop/budget_test.go` (new)
+
+**Learnings:**
+- Zero values for limits allow "unlimited" behavior without special sentinel values
+- Start time is set on first RecordIteration() call, not on construction, allowing for lazy initialization
+- LoadBudget returns empty state (not error) when file doesn't exist - enables clean first-run behavior
+- Budget status includes both human-readable reason and machine-readable reason code for programmatic handling
+- TDD approach: wrote 25 tests first covering defaults, limits, tracker operations, persistence, and edge cases
+
+**Outcome**: Success - all 51 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
