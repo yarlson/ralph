@@ -890,3 +890,33 @@
 - TDD approach: wrote 20 tests first covering struct defaults, all fields, validation, builder construction, system prompt content, user prompt with minimal/full task, size limits, empty sections, and convenience Build method
 
 **Outcome**: Success - all 20 prompt tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: prompt-packager-retry (Retry Prompt Builder)
+
+**What changed:**
+- Implemented `RetryContext` struct in `internal/prompt/retry.go` with fields: Task, FailureOutput, FailureSignature, UserFeedback, AttemptNumber
+- Implemented `BuildRetrySystemPrompt()` method that returns retry-specific harness instructions emphasizing fix-only approach
+- Implemented `BuildRetryPrompt(ctx)` method that builds the retry user prompt with:
+  - Retry header with task title and attempt number (if > 0)
+  - Fix-only directive emphasized at the top
+  - Verification failure section with trimmed output (uses `truncateWithMarker`)
+  - Failure signature for debugging/tracking context
+  - User feedback section (if provided)
+  - Task description and acceptance criteria for reference
+  - Verification commands to run
+  - Fix-focused instructions
+- Implemented `BuildRetry(ctx)` convenience method returning both system and user prompts
+- Reuses existing `truncateWithMarker()` from iteration.go for failure output truncation
+
+**Files touched:**
+- `internal/prompt/retry.go` (new)
+- `internal/prompt/retry_test.go` (new)
+
+**Learnings:**
+- Retry prompts should have stronger "fix-only" directives than initial prompts - repeated emphasis helps focus Claude on minimal fixes
+- Separate `BuildRetrySystemPrompt()` from `BuildSystemPrompt()` allows different harness instructions for retries vs initial attempts
+- Include attempt number in retry prompts to give context on how many times the task has been attempted
+- Zero value for AttemptNumber (0) means not set - don't display "attempt 0" in output
+- TDD approach: wrote 16 tests first covering nil task, minimal context, failure output, failure signature, user feedback, all context, fix-only directive, truncation, attempt number, and system prompt differences
+
+**Outcome**: Success - all 35 prompt tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

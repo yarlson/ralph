@@ -1087,7 +1087,7 @@ tasks:
       - Add "fix-only" directive
       - Include failure signature for context
       - Append user feedback if provided
-    status: open
+    status: completed
     acceptance:
       - "Failure output included and trimmed"
       - "Fix-only directive present"
