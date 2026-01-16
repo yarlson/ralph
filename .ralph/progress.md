@@ -163,3 +163,25 @@
 - TDD approach: wrote 9 comprehensive tests covering valid imports, defaults, validation errors, file errors, empty files, updates, and complex dependencies
 
 **Outcome**: Success - all 46 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: selector-dependency-graph (Dependency Graph Builder)
+
+**What changed:**
+- Created `internal/selector` package with dependency graph implementation
+- Implemented `Graph` struct with nodes, edges (dependencies), and reverseEdges (dependents)
+- Implemented `BuildGraph(tasks)` function that constructs graph from task list and validates all dependencies exist
+- Implemented `DetectCycle()` using DFS with coloring (white/gray/black) to find cycles and return cycle path
+- Implemented `TopologicalSort()` using Kahn's algorithm for ordering tasks by dependencies
+- Added helper methods: `Nodes()`, `HasNode()`, `Dependencies()`, `Dependents()`
+
+**Files touched:**
+- `internal/selector/graph.go` (new)
+- `internal/selector/graph_test.go` (new)
+
+**Learnings:**
+- DFS cycle detection with coloring: white=unvisited, gray=in current path, black=fully explored; back-edge to gray node indicates cycle
+- Kahn's algorithm for topo sort: start with nodes that have no dependencies (inDegree=0), process them, decrement dependents' inDegree, repeat
+- Graph edges point from task to its dependencies (what it depends ON), reverse edges track what depends on a given task
+- Return copies of slices from graph methods to prevent external mutation of internal state
+
+**Outcome**: Success - all 15 selector tests pass, `go build ./...` and `go test ./...` succeed

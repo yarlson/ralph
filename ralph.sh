@@ -68,5 +68,6 @@ while :; do
     echo "Ralph blocked (no ready tasks)." >&2
     exit 2
   fi
+  gic -y
 done
 

@@ -283,7 +283,7 @@ tasks:
       - Builds directed graph from dependsOn relationships
       - Detects cycles using topological sort
       - Returns error with cycle path if found
-    status: open
+    status: completed
     acceptance:
       - "Graph struct with nodes and edges"
       - "BuildGraph constructs from task list"
