@@ -461,3 +461,31 @@
 - TDD approach: wrote 37 tests first covering commit type string conversion, type inference from keywords, message formatting with/without iteration ID, conventional commit parsing, and validation edge cases
 
 **Outcome**: Success - all 59 git tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: memory-manager-progress (Progress File Management)
+
+**What changed:**
+- Created `internal/memory` package for progress and memory file management
+- Implemented `ProgressFile` struct with `NewProgressFile(path)` constructor
+- Implemented `IterationEntry` struct for representing iteration log entries
+- Implemented `SizeOptions` struct for configuring max size limits
+- `Init(featureName, parentTaskID)` creates progress file with standard header (feature name, parent task, start date, Codebase Patterns section, Iteration Log section)
+- `AppendIteration(entry)` appends formatted iteration entries to the file
+- `IterationEntry.Format(timestamp)` formats entry as markdown with what changed, files touched (optional), learnings (optional), and outcome
+- `GetCodebasePatterns()` extracts the Codebase Patterns section using `strings.Cut()`
+- `UpdateCodebasePatterns(patterns)` replaces the patterns section preserving other sections
+- `EnforceMaxSize(opts)` prunes old iteration entries when file exceeds line limit, keeping most recent entries
+- `Exists()` and `Path()` helper methods
+
+**Files touched:**
+- `internal/memory/progress.go` (new)
+- `internal/memory/progress_test.go` (new)
+
+**Learnings:**
+- Use `strings.Cut()` for extracting sections between markers - cleaner than manual Index + slicing
+- Use `fmt.Fprintf(&sb, ...)` instead of `sb.WriteString(fmt.Sprintf(...))` for better linter compliance
+- Use built-in `min()` and `max()` functions (Go 1.21+) instead of if-else statements
+- Pruning iteration entries requires parsing entry boundaries (lines starting with "### ") and keeping entries from the end to preserve most recent work
+- TDD approach: wrote 21 comprehensive tests covering init, append, patterns extraction/update, size enforcement, and formatting
+
+**Outcome**: Success - all 21 memory tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

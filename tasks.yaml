@@ -658,7 +658,7 @@ tasks:
       - AppendIteration adds per-iteration entry
       - GetCodebasePatterns extracts patterns section
       - EnforceMaxSize prunes old entries to stay under cap
-    status: open
+    status: completed
     acceptance:
       - "Progress file created with proper header"
       - "Iterations appended in consistent format"
