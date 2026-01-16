@@ -656,3 +656,33 @@
 - TDD approach: wrote 22 tests first covering struct defaults, all fields, generator creation, various task scenarios (no tasks, blocked, skipped, dependencies, deep hierarchy), last iteration loading (single/multiple files), and formatting
 
 **Outcome**: Success - all 22 reporter tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: reporter-report (Feature Report Generation)
+
+**What changed:**
+- Implemented `Report` struct in `internal/reporter/report.go` with all required fields: ParentTaskID, FeatureName, Commits, CompletedTasks, BlockedTasks, FailedTasks, SkippedTasks, TotalIterations, TotalCostUSD, TotalDuration, StartTime, EndTime
+- Implemented helper structs: `CommitInfo`, `TaskSummary`, `BlockedTaskSummary`
+- Implemented `ReportGenerator` with `NewReportGenerator(store, logsDir)` constructor
+- Implemented `GenerateReport(parentTaskID)` method that:
+  - Gathers all descendant tasks under the parent via BFS traversal
+  - Categorizes tasks by status (completed, blocked, failed, skipped)
+  - Loads all iteration records to calculate totals (iterations, cost, duration)
+  - Extracts commits from successful iteration records
+  - Computes time range from earliest start to latest end
+  - Determines blocked reasons by analyzing dependencies
+- Implemented `LoadAllIterationRecords(logsDir)` function that scans iteration JSON files
+- Implemented `FormatReport(report)` for CLI display with markdown formatting
+- Added `formatDuration(d)` helper for human-readable duration display
+
+**Files touched:**
+- `internal/reporter/report.go` (new)
+- `internal/reporter/report_test.go` (new)
+
+**Learnings:**
+- Reuse `gatherDescendants()` pattern from status.go for BFS traversal
+- Time comparison in tests requires `WithinDuration` instead of `Equal` due to monotonic clock differences when times are loaded from JSON
+- Blocked reason computation: check dependsOn tasks status, report which dependencies are incomplete
+- SkippedTasks should be tracked separately from completed/failed for complete reporting
+- TDD approach: wrote 23 tests first covering struct defaults, all fields, generator creation, various task scenarios (no tasks, completed, blocked, failed, skipped, mixed), iteration records, commits extraction, time range, and formatting
+
+**Outcome**: Success - all 45 reporter tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

@@ -868,7 +868,7 @@ tasks:
       - Lists completed tasks
       - Lists blocked tasks with reasons
       - Includes time and cost totals
-    status: open
+    status: completed
     acceptance:
       - "Report includes all commits"
       - "Task breakdown by status"
