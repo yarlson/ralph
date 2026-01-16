@@ -13,6 +13,33 @@ import (
 	"github.com/yarlson/go-ralph/internal/taskstore"
 )
 
+// Helper to create a valid parent task (not a leaf)
+func createValidParentTask(id, title string) *taskstore.Task {
+	return &taskstore.Task{
+		ID:          id,
+		Title:       title,
+		Description: title + " description",
+		Status:      taskstore.StatusOpen,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+}
+
+// Helper to create a valid leaf task
+func createValidLeafTask(id, title string, parentID *string) *taskstore.Task {
+	return &taskstore.Task{
+		ID:          id,
+		Title:       title,
+		Description: title + " description",
+		Status:      taskstore.StatusOpen,
+		ParentID:    parentID,
+		Verify:      [][]string{{"go", "test"}},
+		Acceptance:  []string{"Test passes"},
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+}
+
 func TestInitCommand(t *testing.T) {
 	t.Run("has --parent flag", func(t *testing.T) {
 		cmd := newInitCmd()
@@ -49,24 +76,11 @@ func TestInitCommand(t *testing.T) {
 		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
 		require.NoError(t, err)
 
-		parentTask := &taskstore.Task{
-			ID:        "feature-1",
-			Title:     "Test Feature",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("feature-1", "Test Feature")
 		require.NoError(t, store.Save(parentTask))
 
 		// Create a leaf task under the parent
-		leafTask := &taskstore.Task{
-			ID:        "leaf-1",
-			Title:     "Leaf Task",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("feature-1"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("leaf-1", "Leaf Task", strPtr("feature-1"))
 		require.NoError(t, store.Save(leafTask))
 
 		cmd := NewRootCmd()
@@ -94,24 +108,11 @@ func TestInitCommand(t *testing.T) {
 		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
 		require.NoError(t, err)
 
-		parentTask := &taskstore.Task{
-			ID:        "feature-x",
-			Title:     "Feature X",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("feature-x", "Feature X")
 		require.NoError(t, store.Save(parentTask))
 
 		// Create a leaf task
-		leafTask := &taskstore.Task{
-			ID:        "leaf-x",
-			Title:     "Leaf X",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("feature-x"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("leaf-x", "Leaf X", strPtr("feature-x"))
 		require.NoError(t, store.Save(leafTask))
 
 		cmd := NewRootCmd()
@@ -158,36 +159,16 @@ func TestInitCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create parent task
-		parentTask := &taskstore.Task{
-			ID:        "parent",
-			Title:     "Parent",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("parent", "Parent")
 		require.NoError(t, store.Save(parentTask))
 
 		// Create tasks with cyclic dependencies
-		taskA := &taskstore.Task{
-			ID:        "task-a",
-			Title:     "Task A",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("parent"),
-			DependsOn: []string{"task-b"},
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		taskA := createValidLeafTask("task-a", "Task A", strPtr("parent"))
+		taskA.DependsOn = []string{"task-b"} // A depends on B
 		require.NoError(t, store.Save(taskA))
 
-		taskB := &taskstore.Task{
-			ID:        "task-b",
-			Title:     "Task B",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("parent"),
-			DependsOn: []string{"task-a"},
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		taskB := createValidLeafTask("task-b", "Task B", strPtr("parent"))
+		taskB.DependsOn = []string{"task-a"} // B depends on A - cycle!
 		require.NoError(t, store.Save(taskB))
 
 		cmd := NewRootCmd()
@@ -210,36 +191,15 @@ func TestInitCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create parent task
-		parentTask := &taskstore.Task{
-			ID:        "parent",
-			Title:     "Parent",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("parent", "Parent")
 		require.NoError(t, store.Save(parentTask))
 
 		// Create leaf task that depends on non-existent completed task
-		leafTask := &taskstore.Task{
-			ID:        "leaf",
-			Title:     "Leaf",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("parent"),
-			DependsOn: []string{"dep"},
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("leaf", "Leaf", strPtr("parent"))
 		require.NoError(t, store.Save(leafTask))
 
 		// Create dep task that is not completed
-		depTask := &taskstore.Task{
-			ID:        "dep",
-			Title:     "Dependency",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("parent"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		depTask := createValidLeafTask("dep", "Dependency", strPtr("parent"))
 		require.NoError(t, store.Save(depTask))
 
 		cmd := NewRootCmd()
@@ -262,24 +222,12 @@ func TestInitCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create parent task
-		parentTask := &taskstore.Task{
-			ID:        "parent",
-			Title:     "Parent",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("parent", "Parent")
 		require.NoError(t, store.Save(parentTask))
 
 		// Create leaf task that is already completed
-		leafTask := &taskstore.Task{
-			ID:        "leaf",
-			Title:     "Leaf",
-			Status:    taskstore.StatusCompleted,
-			ParentID:  strPtr("parent"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("leaf", "Leaf", strPtr("parent"))
+		leafTask.Status = taskstore.StatusCompleted // Make it completed so it's not ready
 		require.NoError(t, store.Save(leafTask))
 
 		cmd := NewRootCmd()
@@ -301,23 +249,10 @@ func TestInitCommand(t *testing.T) {
 		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
 		require.NoError(t, err)
 
-		parentTask := &taskstore.Task{
-			ID:        "feature-auth",
-			Title:     "Authentication Feature",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("feature-auth", "Authentication Feature")
 		require.NoError(t, store.Save(parentTask))
 
-		leafTask := &taskstore.Task{
-			ID:        "auth-leaf",
-			Title:     "Auth Leaf",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("feature-auth"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("auth-leaf", "Auth Leaf", strPtr("feature-auth"))
 		require.NoError(t, store.Save(leafTask))
 
 		cmd := NewRootCmd()
@@ -343,23 +278,10 @@ func TestInitCommand(t *testing.T) {
 		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
 		require.NoError(t, err)
 
-		parentTask := &taskstore.Task{
-			ID:        "my-feature",
-			Title:     "My AWESOME Feature",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("my-feature", "My AWESOME Feature")
 		require.NoError(t, store.Save(parentTask))
 
-		leafTask := &taskstore.Task{
-			ID:        "leaf-1",
-			Title:     "Leaf",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("my-feature"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("leaf-1", "Leaf", strPtr("my-feature"))
 		require.NoError(t, store.Save(leafTask))
 
 		cmd := NewRootCmd()
@@ -403,22 +325,10 @@ func TestInitCommand(t *testing.T) {
 		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
 		require.NoError(t, err)
 
-		task1 := &taskstore.Task{
-			ID:        "feature-1",
-			Title:     "Feature One",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		task1 := createValidParentTask("feature-1", "Feature One")
 		require.NoError(t, store.Save(task1))
 
-		task2 := &taskstore.Task{
-			ID:        "feature-2",
-			Title:     "Feature Two",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		task2 := createValidParentTask("feature-2", "Feature Two")
 		require.NoError(t, store.Save(task2))
 
 		cmd := NewRootCmd()
@@ -454,23 +364,10 @@ func TestInitCommand(t *testing.T) {
 		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
 		require.NoError(t, err)
 
-		parentTask := &taskstore.Task{
-			ID:        "test-feature",
-			Title:     "Test Feature",
-			Status:    taskstore.StatusOpen,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		parentTask := createValidParentTask("test-feature", "Test Feature")
 		require.NoError(t, store.Save(parentTask))
 
-		leafTask := &taskstore.Task{
-			ID:        "leaf",
-			Title:     "Leaf",
-			Status:    taskstore.StatusOpen,
-			ParentID:  strPtr("test-feature"),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
+		leafTask := createValidLeafTask("leaf", "Leaf", strPtr("test-feature"))
 		require.NoError(t, store.Save(leafTask))
 
 		cmd := NewRootCmd()

@@ -96,9 +96,13 @@ func TestImportCmd_ValidYAML(t *testing.T) {
   - id: task-1
     title: Test Task 1
     description: A test task
+    verify:
+      - ["go", "test"]
   - id: task-2
     title: Test Task 2
     description: Another test task
+    verify:
+      - ["go", "test"]
 `
 	yamlFile := filepath.Join(tmpDir, "tasks.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
@@ -143,11 +147,13 @@ func TestImportCmd_ValidationErrors(t *testing.T) {
 	cmd.SetErr(&errBuf)
 
 	err := cmd.Execute()
-	require.NoError(t, err) // Should succeed but report errors
+	// Now with linter, invalid tasks cause import to fail after reporting import errors
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
 
 	output := outBuf.String()
 	assert.Contains(t, output, "Successfully imported 1 task(s)")
-	assert.Contains(t, output, "1 error(s) occurred")
+	assert.Contains(t, output, "1 error(s) occurred during import")
 }
 
 func TestImportCmd_Overwrite(t *testing.T) {
@@ -162,7 +168,10 @@ func TestImportCmd_Overwrite(t *testing.T) {
 	yamlContent := `tasks:
   - id: task-1
     title: Original Title
+    description: Original description
     status: open
+    verify:
+      - ["go", "test"]
 `
 	yamlFile := filepath.Join(tmpDir, "tasks.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
@@ -175,7 +184,10 @@ func TestImportCmd_Overwrite(t *testing.T) {
 	yamlContent2 := `tasks:
   - id: task-1
     title: Updated Title
+    description: Updated description
     status: completed
+    verify:
+      - ["go", "test"]
 `
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent2), 0644))
 
@@ -230,10 +242,16 @@ func TestImportCmd_AtomicImport(t *testing.T) {
 	yamlContent := `tasks:
   - id: task-1
     title: Valid Task
+    description: Valid task description
+    verify:
+      - ["go", "test"]
   - id: ""
     title: ""
   - id: task-2
     title: Another Valid Task
+    description: Another valid task description
+    verify:
+      - ["go", "test"]
 `
 	yamlFile := filepath.Join(tmpDir, "tasks.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
@@ -245,10 +263,11 @@ func TestImportCmd_AtomicImport(t *testing.T) {
 	cmd.SetOut(&outBuf)
 
 	err := cmd.Execute()
+	// Import is not atomic - valid tasks are imported, invalid tasks are skipped
+	// The 2 valid tasks pass linter validation, so no error
 	require.NoError(t, err)
 
 	output := outBuf.String()
-	// Import is not atomic - valid tasks are imported, invalid tasks are skipped
 	assert.Contains(t, output, "Successfully imported 2 task(s)")
-	assert.Contains(t, output, "1 error(s) occurred")
+	assert.Contains(t, output, "1 error(s) occurred during import")
 }

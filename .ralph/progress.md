@@ -1451,3 +1451,45 @@
 
 **Outcome**: Success - all tests pass (go test ./...), per-iteration timeout enforcement implemented, Claude subprocess properly cancelled on timeout, iteration marked as budget_exceeded when timeout occurs
 
+### 2026-01-16: ralph-align-task-linter (Implement Task Linter)
+
+**What changed:**
+
+- Created `internal/taskstore/linter.go` with comprehensive task validation functionality
+- Implemented `LintTask(task)` function that validates individual tasks for required fields (description)
+- Implemented `LintTaskWithWarnings(task)` that returns both errors and warnings (e.g., missing acceptance criteria)
+- Implemented `LintTaskSet(tasks)` function that validates entire task graph:
+  - Individual task validity (description required, valid status)
+  - Parent ID validity (parent task must exist)
+  - Dependency existence (all dependsOn tasks must exist)
+  - Dependency cycle detection using DFS with coloring
+  - Leaf task verification commands (leaf tasks must have verify commands)
+- Created `LintResult`, `LintError`, and `LintWarning` types for structured error reporting
+- Implemented `detectDependencyCycle()` helper using DFS algorithm (white/gray/black coloring)
+- Implemented `isLeafTask()` helper to identify tasks with no children
+- Integrated linter into `cmd/init.go` - validates all tasks before allowing init
+- Integrated linter into `cmd/import.go` - validates imported tasks after import, displays warnings
+- Updated all test fixtures in `cmd/init_test.go` and `cmd/import_test.go` to create valid tasks with descriptions and verify commands
+
+**Files touched:**
+
+- `internal/taskstore/linter.go` (new)
+- `internal/taskstore/linter_test.go` (new)
+- `cmd/init.go` (added linter call)
+- `cmd/import.go` (added linter call and warning display)
+- `cmd/init_test.go` (added helper functions, updated fixtures)
+- `cmd/import_test.go` (updated test expectations and fixtures)
+- `tasks.yaml` (marked ralph-align-task-linter as completed)
+
+**Learnings:**
+
+- Avoided import cycle by implementing cycle detection directly in linter instead of importing selector package (taskstore already imported by selector)
+- Used DFS with three-color marking (white=unvisited, gray=in-progress, black=done) for cycle detection - gray back-edge indicates cycle
+- Warnings (missing acceptance criteria) are non-fatal and don't prevent task usage, but errors (missing description, missing verify on leaves) fail validation
+- Linter runs after import completes to validate the entire task set including cross-task relationships (cycles, dependencies, parent-child)
+- Test fixtures needed updating because linter now enforces stricter validation - all leaf tasks must have descriptions and verify commands
+- Created helper functions `createValidParentTask()` and `createValidLeafTask()` in tests for consistent valid task creation
+- The `LintResult.Error()` method returns nil if valid, or formatted error with all validation failures if invalid
+
+**Outcome**: Success - all tests pass (go test ./..., go build ./..., golangci-lint run), linter fully integrated into init and import commands
+

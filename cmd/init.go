@@ -93,6 +93,14 @@ func runInit(cmd *cobra.Command, parentID, searchTerm string) error {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
+	// Lint all tasks
+	lintResult := taskstore.LintTaskSet(allTasks)
+	if !lintResult.Valid {
+		if err := lintResult.Error(); err != nil {
+			return fmt.Errorf("task validation failed:\n%w", err)
+		}
+	}
+
 	// Build dependency graph
 	graph, err := selector.BuildGraph(allTasks)
 	if err != nil {

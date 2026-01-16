@@ -180,7 +180,7 @@ tasks:
     description: |
       Create internal/taskstore/linter.go to validate tasks.
       Call linter in ralph init and ralph import.
-    status: open
+    status: completed
     acceptance:
       - "Init fails if tasks are invalid"
       - "Import fails if tasks are invalid"

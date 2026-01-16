@@ -68,13 +68,34 @@ Example YAML format:
 				return fmt.Errorf("import failed: %w", err)
 			}
 
-			// Display results
+			// Display import results
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Successfully imported %d task(s)\n", result.Imported)
 
 			if len(result.Errors) > 0 {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%d error(s) occurred:\n", len(result.Errors))
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%d error(s) occurred during import:\n", len(result.Errors))
 				for _, impErr := range result.Errors {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  - Task %q: %s\n", impErr.ID, impErr.Reason)
+				}
+			}
+
+			// Lint all tasks after import to validate the complete task set
+			allTasks, err := store.List()
+			if err != nil {
+				return fmt.Errorf("failed to list tasks for validation: %w", err)
+			}
+
+			lintResult := taskstore.LintTaskSet(allTasks)
+			if !lintResult.Valid {
+				if err := lintResult.Error(); err != nil {
+					return fmt.Errorf("task validation failed after import:\n%w", err)
+				}
+			}
+
+			// Display warnings if any
+			if len(lintResult.Warnings) > 0 {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%d warning(s):\n", len(lintResult.Warnings))
+				for _, warning := range lintResult.Warnings {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  - Task %q: %s\n", warning.TaskID, warning.Warning)
 				}
 			}
 
