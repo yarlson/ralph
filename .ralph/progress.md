@@ -799,3 +799,36 @@
 - TDD approach: wrote 13 tests covering command structure, error cases, setting/clearing flag, and run respecting paused state
 
 **Outcome**: Success - all tests pass (15 state tests, 66 cmd tests), `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: cli-retry-skip (ralph retry/skip Commands)
+
+**What changed:**
+- Implemented `ralph retry` command in `cmd/retry.go`
+- Implemented `ralph skip` command in `cmd/skip.go`
+- `retry --task <id>` resets task status from failed/blocked/in_progress to open
+- `retry --feedback <text>` saves feedback to `.ralph/state/feedback-<task-id>.txt`
+- `skip --task <id>` marks task as skipped
+- `skip --reason <text>` saves skip reason to `.ralph/state/skip-reason-<task-id>.txt`
+- Both commands validate task exists and is in appropriate state
+- Cannot retry completed or skipped tasks
+- Cannot skip completed tasks
+- Removed stub `newRetryCmd()` and `newSkipCmd()` from `cmd/root.go`
+
+**Files touched:**
+- `cmd/retry.go` (new)
+- `cmd/retry_test.go` (new)
+- `cmd/skip.go` (new)
+- `cmd/skip_test.go` (new)
+- `cmd/root.go` (removed retry/skip stub commands)
+- `cmd/root_test.go` (removed retry/skip from stub commands list)
+
+**Learnings:**
+- Reuse existing `taskstore` package for task retrieval and status updates
+- Use `state.StateDirPath()` for feedback/reason file storage
+- Tasks can be in states: open, in_progress, completed, blocked, failed, skipped
+- Retry allows: failed, blocked, in_progress -> open
+- Skip allows: open, in_progress, blocked, failed -> skipped
+- Handle edge cases: already open (for retry), already skipped (for skip)
+- TDD approach: wrote 20 tests first covering command structure, flags, error cases, state transitions, and feedback/reason file persistence
+
+**Outcome**: Success - all cmd tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

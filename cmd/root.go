@@ -48,28 +48,6 @@ func Execute() {
 // errNotImplemented is returned by stub commands
 var errNotImplemented = errors.New("not implemented")
 
-func newRetryCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "retry",
-		Short: "Retry a failed task",
-		Long:  "Reset a task to open status and add feedback for the next attempt.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("retry: %w", errNotImplemented)
-		},
-	}
-}
-
-func newSkipCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "skip",
-		Short: "Skip a task",
-		Long:  "Mark a task as skipped so the loop can continue.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("skip: %w", errNotImplemented)
-		},
-	}
-}
-
 func newReportCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "report",

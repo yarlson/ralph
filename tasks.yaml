@@ -1000,7 +1000,7 @@ tasks:
       - retry --task <id>: resets task to open, adds feedback
       - skip --task <id>: marks task as skipped
       - Both validate task exists and is in appropriate state
-    status: open
+    status: completed
     acceptance:
       - "Retry resets task status"
       - "Skip marks as skipped"
