@@ -48,17 +48,6 @@ func Execute() {
 // errNotImplemented is returned by stub commands
 var errNotImplemented = errors.New("not implemented")
 
-func newInitCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "init",
-		Short: "Initialize ralph for a feature",
-		Long:  "Initialize ralph by setting the parent task ID and validating the task graph.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("init: %w", errNotImplemented)
-		},
-	}
-}
-
 func newRunCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "run",

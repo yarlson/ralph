@@ -51,8 +51,8 @@ func TestRootCommand(t *testing.T) {
 }
 
 func TestSubcommands(t *testing.T) {
-	subcommands := []string{
-		"init",
+	// Commands that are still stubs (not yet implemented)
+	stubCommands := []string{
 		"run",
 		"status",
 		"pause",
@@ -62,7 +62,7 @@ func TestSubcommands(t *testing.T) {
 		"report",
 	}
 
-	for _, name := range subcommands {
+	for _, name := range stubCommands {
 		t.Run(name+" returns not implemented", func(t *testing.T) {
 			cmd := NewRootCmd()
 			var buf bytes.Buffer

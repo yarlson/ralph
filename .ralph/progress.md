@@ -686,3 +686,31 @@
 - TDD approach: wrote 23 tests first covering struct defaults, all fields, generator creation, various task scenarios (no tasks, completed, blocked, failed, skipped, mixed), iteration records, commits extraction, time range, and formatting
 
 **Outcome**: Success - all 45 reporter tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: cli-init (ralph init Command)
+
+**What changed:**
+- Implemented `ralph init` command in `cmd/init.go`
+- Added `--parent <id>` flag to specify parent task ID directly
+- Added `--search <term>` flag to find parent task by title substring (case-insensitive)
+- Creates `.ralph/` directory structure using `state.EnsureRalphDir`
+- Writes parent task ID to `.ralph/parent-task-id` file
+- Validates parent task exists in task store
+- Validates task graph has no cycles using `selector.BuildGraph` and `graph.DetectCycle`
+- Validates at least one ready leaf task exists under the parent
+- Updated `root_test.go` to remove `init` from stub commands list
+
+**Files touched:**
+- `cmd/init.go` (new)
+- `cmd/init_test.go` (new)
+- `cmd/root.go` (removed stub newInitCmd function)
+- `cmd/root_test.go` (updated stub commands list)
+
+**Learnings:**
+- Use `cmd.OutOrStdout()` for writing output in Cobra commands to allow capturing in tests
+- Must handle `fmt.Fprintf` return values explicitly to pass errcheck linter (`_, _ = fmt.Fprintf(...)`)
+- Tests need to change working directory (`os.Chdir`) to temp dir since config and state operations are relative to cwd
+- Reuse `selector.GetReadyLeaves` for consistent ready task logic, then filter to descendants of parent
+- BFS traversal with parent-to-children map efficiently gathers all descendants
+
+**Outcome**: Success - all 31 cmd tests pass (16 init tests + 15 root tests), `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

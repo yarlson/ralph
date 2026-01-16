@@ -915,7 +915,7 @@ tasks:
       - Creates .ralph/ directory structure
       - Writes .ralph/parent-task-id
       - Validates task graph (acyclic, has ready leaves)
-    status: open
+    status: completed
     acceptance:
       - "Creates .ralph/ structure"
       - "Parent task ID persisted"
