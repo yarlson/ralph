@@ -12,26 +12,26 @@ It is written to be implementation-ready: command contracts, parsing rules, stat
 
 ### Goals
 
-* Execute `claude` as a subprocess from Go.
-* Support:
+- Execute `claude` as a subprocess from Go.
+- Support:
+  - **fresh sessions**
+  - **continued sessions** (`--continue`) using the same `session_id`
 
-  * **fresh sessions**
-  * **continued sessions** (`--continue`) using the same `session_id`
-* Parse streaming JSON lines emitted by Claude Code (`--output-format="stream-json"`).
-* Extract:
+- Parse streaming JSON lines emitted by Claude Code (`--output-format="stream-json"`).
+- Extract:
+  - `session_id`
+  - tool availability / metadata (init)
+  - assistant output (final result text)
+  - usage and cost telemetry (for budgets)
+  - permission denials / errors
 
-  * `session_id`
-  * tool availability / metadata (init)
-  * assistant output (final result text)
-  * usage and cost telemetry (for budgets)
-  * permission denials / errors
-* Provide a stable internal interface for the Ralph harness iteration loop.
+- Provide a stable internal interface for the Ralph harness iteration loop.
 
 ### Non-goals
 
-* We do not implement Claude tools ourselves (Claude Code owns that).
-* We do not depend on Claude’s human-facing `--verbose` formatting; only stream-json lines are authoritative.
-* We do not rely on Claude memory beyond `--continue` semantics; repo state remains source of truth.
+- We do not implement Claude tools ourselves (Claude Code owns that).
+- We do not depend on Claude’s human-facing `--verbose` formatting; only stream-json lines are authoritative.
+- We do not rely on Claude memory beyond `--continue` semantics; repo state remains source of truth.
 
 ---
 
@@ -52,16 +52,16 @@ claude \
 
 ### Key flags we will use
 
-* `--output-format="stream-json"`: **required** for machine parsing.
-* `--continue`: instructs Claude to continue an existing session. In your output, session continuity is achieved by Claude reusing the same `session_id` (it prints it in `system/init`).
-* `--system-prompt <string>`: system prompt injection.
-* `--allowedTools "<comma-separated>"`: restrict tool surface (recommended).
-* `--dangerously-skip-permissions`: bypass permission prompts (recommended only in sandbox or controlled env).
-* `--verbose`: emits additional content; still safe if we parse JSON lines only.
+- `--output-format="stream-json"`: **required** for machine parsing.
+- `--continue`: instructs Claude to continue an existing session. In your output, session continuity is achieved by Claude reusing the same `session_id` (it prints it in `system/init`).
+- `--system-prompt <string>`: system prompt injection.
+- `--allowedTools "<comma-separated>"`: restrict tool surface (recommended).
+- `--dangerously-skip-permissions`: bypass permission prompts (recommended only in sandbox or controlled env).
+- `--verbose`: emits additional content; still safe if we parse JSON lines only.
 
 ### Input prompt
 
-* `-p "<prompt>"` is used for the user message content.
+- `-p "<prompt>"` is used for the user message content.
 
 ### Working directory matters
 
@@ -85,12 +85,12 @@ Example:
 
 Use this to capture:
 
-* `session_id` (primary handle)
-* `cwd` (sanity check)
-* `model` (telemetry)
-* tool list (optional for auditing)
-* `claude_code_version` (for compatibility tracking)
-* permission mode (audit)
+- `session_id` (primary handle)
+- `cwd` (sanity check)
+- `model` (telemetry)
+- tool list (optional for auditing)
+- `claude_code_version` (for compatibility tracking)
+- permission mode (audit)
 
 ### 3.2 `assistant/message`
 
@@ -102,8 +102,8 @@ Example:
 
 This carries incremental assistant content. You should:
 
-* accumulate any `content[].text` into a streaming buffer, preserving order
-* ignore non-text content types unless you explicitly support them later
+- accumulate any `content[].text` into a streaming buffer, preserving order
+- ignore non-text content types unless you explicitly support them later
 
 Also capture `usage` if present.
 
@@ -117,10 +117,10 @@ Example:
 
 This is the **terminal record** for the command execution and is the authoritative “final text” for the run:
 
-* `result`: final combined assistant output (string)
-* `duration_ms`, `num_turns`: telemetry
-* `total_cost_usd`, `usage`: budget/accounting inputs
-* `permission_denials`: important for safety
+- `result`: final combined assistant output (string)
+- `duration_ms`, `num_turns`: telemetry
+- `total_cost_usd`, `usage`: budget/accounting inputs
+- `permission_denials`: important for safety
 
 There can also be `result/subtype:"error"` (or `is_error:true`) variants; handle generically.
 
@@ -130,17 +130,17 @@ There can also be `result/subtype:"error"` (or `is_error:true`) variants; handle
 
 ### What `--continue` means operationally
 
-* With `--continue`, Claude loads prior session context and continues the same thread.
-* The stream includes the same `session_id` in `system/init` and later messages.
-* **Your harness must treat `session_id` as the durable session key**.
+- With `--continue`, Claude loads prior session context and continues the same thread.
+- The stream includes the same `session_id` in `system/init` and later messages.
+- **Your harness must treat `session_id` as the durable session key**.
 
 ### Harness-level session policy
 
 For the Ralph loop harness, treat each **task iteration** as:
 
-* Prefer: **fresh Claude session** for coding tasks (aligns with Ralph memory hygiene), unless you deliberately choose to “continue” within a single iteration for multi-turn clarification.
-* Allowed: continue within the same iteration to ask clarifying questions or handle follow-ups (like your PRD planner example).
-* Not recommended: continuing the same session across multiple leaf tasks, unless you have a strong reason. Repo state already carries continuity; carrying conversational state increases drift risk.
+- Prefer: **fresh Claude session** for coding tasks (aligns with Ralph memory hygiene), unless you deliberately choose to “continue” within a single iteration for multi-turn clarification.
+- Allowed: continue within the same iteration to ask clarifying questions or handle follow-ups (like your PRD planner example).
+- Not recommended: continuing the same session across multiple leaf tasks, unless you have a strong reason. Repo state already carries continuity; carrying conversational state increases drift risk.
 
 ### Required state file
 
@@ -156,9 +156,9 @@ Store per-run session IDs in `.ralph/state/claude-session.json`:
 
 Even if you mostly run fresh sessions, storing IDs is valuable for:
 
-* debugging reproducibility
-* optional `--continue` flows
-* postmortems
+- debugging reproducibility
+- optional `--continue` flows
+- postmortems
 
 ---
 
@@ -196,15 +196,14 @@ type ClaudeResponse struct {
 
 ### 5.2 Subprocess execution rules
 
-* Use `exec.CommandContext` so cancellation kills the process.
-* Set:
+- Use `exec.CommandContext` so cancellation kills the process.
+- Set:
+  - `cmd.Dir = req.Cwd`
+  - `cmd.Env = os.Environ() + req.Env`
 
-  * `cmd.Dir = req.Cwd`
-  * `cmd.Env = os.Environ() + req.Env`
-* Capture:
-
-  * stdout as stream
-  * stderr separately for diagnostics (but do not parse stderr as JSON)
+- Capture:
+  - stdout as stream
+  - stderr separately for diagnostics (but do not parse stderr as JSON)
 
 ### 5.3 Always log raw NDJSON
 
@@ -218,40 +217,38 @@ This is non-negotiable for debugging: you will need to replay parse failures and
 
 ### 6.1 Parser model
 
-* Read stdout line-by-line using a buffered scanner or `bufio.Reader.ReadString('\n')`.
-* Each line must be parsed as independent JSON.
-* Do not assume ordering beyond:
-
-  * system/init appears early
-  * result/* appears once at the end
+- Read stdout line-by-line using a buffered scanner or `bufio.Reader.ReadString('\n')`.
+- Each line must be parsed as independent JSON.
+- Do not assume ordering beyond:
+  - system/init appears early
+  - result/\* appears once at the end
 
 ### 6.2 Robustness constraints
 
-* Some lines may be large. `bufio.Scanner` has token limits; set a larger buffer:
+- Some lines may be large. `bufio.Scanner` has token limits; set a larger buffer:
+  - `scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)` (tune as needed)
 
-  * `scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)` (tune as needed)
-* If JSON parsing fails on a line:
-
-  * record parse error
-  * keep the raw line in logs
-  * attempt to continue parsing subsequent lines
-  * fail the run only if terminal `result` is never successfully parsed
+- If JSON parsing fails on a line:
+  - record parse error
+  - keep the raw line in logs
+  - attempt to continue parsing subsequent lines
+  - fail the run only if terminal `result` is never successfully parsed
 
 ### 6.3 Event extraction rules
 
 Maintain a struct:
 
-* `sessionID` from first `system/init` encountered
-* `model`, `claude_code_version` from init (if present)
-* `streamText` append from each `assistant/message`
-* `finalText` from `result.result` (authoritative)
-* `usage` and `total_cost_usd` from result if present
-* `permission_denials` from result
+- `sessionID` from first `system/init` encountered
+- `model`, `claude_code_version` from init (if present)
+- `streamText` append from each `assistant/message`
+- `finalText` from `result.result` (authoritative)
+- `usage` and `total_cost_usd` from result if present
+- `permission_denials` from result
 
 At end-of-process:
 
-* If `finalText` is empty but `streamText` exists, return `streamText` as fallback (and mark response as “degraded” in logs).
-* If neither exists, return error.
+- If `finalText` is empty but `streamText` exists, return `streamText` as fallback (and mark response as “degraded” in logs).
+- If neither exists, return error.
 
 ### 6.4 Schema tolerance
 
@@ -276,9 +273,9 @@ claude \
 
 Optional but common:
 
-* `--dangerously-skip-permissions` (sandbox only)
-* `--continue` (when continuing a session)
-* `--verbose` (not required if you parse JSON only)
+- `--dangerously-skip-permissions` (sandbox only)
+- `--continue` (when continuing a session)
+- `--verbose` (not required if you parse JSON only)
 
 ### 7.2 Tool allowlisting
 
@@ -295,25 +292,24 @@ Prefer to include `Write` explicitly if Claude uses it; your sample allowed `Edi
 
 ### 8.1 Files
 
-* `.ralph/state/claude-session.json`
-* `.ralph/logs/claude/*.ndjson`
-* `.ralph/logs/claude/*.stderr` (optional)
+- `.ralph/state/claude-session.json`
+- `.ralph/logs/claude/*.ndjson`
+- `.ralph/logs/claude/*.stderr` (optional)
 
 ### 8.2 Session usage policy
 
-* If `req.Continue == true`:
-
-  * you must pass `--continue`
-  * you should expect same `session_id` in init
-  * if a new session_id appears, treat it as “session fork” and update state
+- If `req.Continue == true`:
+  - you must pass `--continue`
+  - you should expect same `session_id` in init
+  - if a new session_id appears, treat it as “session fork” and update state
 
 ### 8.3 Concurrency policy
 
 Do not run multiple Claude subprocesses concurrently in the same workspace branch unless you implement isolation:
 
-* separate branches per worker
-* separate working directories
-* separate `.ralph/state` files
+- separate branches per worker
+- separate working directories
+- separate `.ralph/state` files
 
 MVP: single-threaded loop only.
 
@@ -331,14 +327,13 @@ MVP: single-threaded loop only.
 
 ### 9.2 Retry policy (recommended)
 
-* Do not automatically retry Claude invocation on semantic failures (it can worsen churn).
-* You may retry **once** on:
+- Do not automatically retry Claude invocation on semantic failures (it can worsen churn).
+- You may retry **once** on:
+  - transient parse issues (rare)
+  - process crash
 
-  * transient parse issues (rare)
-  * process crash
-* If permission denials occur:
-
-  * fail fast unless your policy allows permission prompts (you are bypassing permissions, so denials should be actionable signal).
+- If permission denials occur:
+  - fail fast unless your policy allows permission prompts (you are bypassing permissions, so denials should be actionable signal).
 
 ---
 
@@ -358,23 +353,21 @@ Maintain `.ralph/state/budget.json`:
 
 If `total_cost_usd` is absent for some reason:
 
-* fall back to time/iterations budgets.
+- fall back to time/iterations budgets.
 
 ---
 
 ## 11) Security Considerations
 
-* `--dangerously-skip-permissions` is acceptable only when:
+- `--dangerously-skip-permissions` is acceptable only when:
+  - run in a sandbox (container/VM)
+  - command allowlist is enforced for verification steps
+  - repository contains no secrets (or secrets are masked)
 
-  * run in a sandbox (container/VM)
-  * command allowlist is enforced for verification steps
-  * repository contains no secrets (or secrets are masked)
-
-* Never embed secrets in:
-
-  * system prompt
-  * user prompt
-  * logged NDJSON (mask via env injection rather than prompt content)
+- Never embed secrets in:
+  - system prompt
+  - user prompt
+  - logged NDJSON (mask via env injection rather than prompt content)
 
 ---
 
@@ -384,24 +377,23 @@ This is not full code, but enough to implement correctly.
 
 Core loop:
 
-* spawn process
-* read stdout lines
-* write each line to NDJSON log
-* parse JSON and update accumulator
-* wait for exit
-* validate final result
+- spawn process
+- read stdout lines
+- write each line to NDJSON log
+- parse JSON and update accumulator
+- wait for exit
+- validate final result
 
 Parsing strategy:
 
-* partial struct:
+- partial struct:
+  - `Type string 'json:"type"'`
+  - `Subtype string 'json:"subtype"'`
 
-  * `Type string 'json:"type"'`
-  * `Subtype string 'json:"subtype"'`
-* switch on `Type`:
-
-  * `system` + `subtype=init`: parse init fields
-  * `assistant`: parse `message.content[]` and append text
-  * `result`: parse `result`, `total_cost_usd`, `usage`, `permission_denials`
+- switch on `Type`:
+  - `system` + `subtype=init`: parse init fields
+  - `assistant`: parse `message.content[]` and append text
+  - `result`: parse `result`, `total_cost_usd`, `usage`, `permission_denials`
 
 ---
 
@@ -409,11 +401,10 @@ Parsing strategy:
 
 For the Ralph loop harness (task-by-task autonomy):
 
-* **Default**: do not use `--continue` across tasks. Use fresh sessions and rely on repo state + progress.md patterns.
-* **Use `--continue` only**:
-
-  * within a single planning flow where Claude asks clarifying questions
-  * within a single task iteration if Claude needs additional user answers (AskUserQuestion) and you choose to keep that conversational state
+- **Default**: do not use `--continue` across tasks. Use fresh sessions and rely on repo state + progress.md patterns.
+- **Use `--continue` only**:
+  - within a single planning flow where Claude asks clarifying questions
+  - within a single task iteration if Claude needs additional user answers (AskUserQuestion) and you choose to keep that conversational state
 
 This keeps the “Ralph hygiene” property: prompt memory stays clean, while the environment (git/files) persists.
 
@@ -432,18 +423,17 @@ This keeps the “Ralph hygiene” property: prompt memory stays clean, while th
 
 ## 15) Deliverable Checklist
 
-* [ ] `internal/claude/runner.go` (subprocess runner)
-* [ ] `internal/claude/ndjson_parser.go` (event parsing)
-* [ ] `.ralph/logs/claude/` raw NDJSON logging
-* [ ] `.ralph/state/claude-session.json` session persistence
-* [ ] CLI flags mapping (`--continue`, tool allowlist, system prompt)
-* [ ] Unit tests for parser with captured fixtures (use your sample NDJSON)
+- [ ] `internal/claude/runner.go` (subprocess runner)
+- [ ] `internal/claude/ndjson_parser.go` (event parsing)
+- [ ] `.ralph/logs/claude/` raw NDJSON logging
+- [ ] `.ralph/state/claude-session.json` session persistence
+- [ ] CLI flags mapping (`--continue`, tool allowlist, system prompt)
+- [ ] Unit tests for parser with captured fixtures (use your sample NDJSON)
 
 ---
 
 If you want the next step, I can produce:
 
-* a precise **Go struct schema** for the events (minimal + tolerant),
-* a reference implementation of the runner/parser (production-grade),
-* and a “Claude prompt packager” spec that inserts verification failures and progress patterns without exceeding caps.
-
+- a precise **Go struct schema** for the events (minimal + tolerant),
+- a reference implementation of the runner/parser (production-grade),
+- and a “Claude prompt packager” spec that inserts verification failures and progress patterns without exceeding caps.

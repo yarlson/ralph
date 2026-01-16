@@ -212,22 +212,22 @@ func FormatStatus(status *Status) string {
 	sb.WriteString("## Status\n\n")
 
 	// Parent info
-	fmt.Fprintf(&sb, "Parent: %s\n\n", status.ParentTaskID)
+	_, _ = fmt.Fprintf(&sb, "Parent: %s\n\n", status.ParentTaskID)
 
 	// Task counts
 	sb.WriteString("### Task Counts\n")
-	fmt.Fprintf(&sb, "Total: %d\n", status.Counts.Total)
-	fmt.Fprintf(&sb, "Completed: %d\n", status.Counts.Completed)
-	fmt.Fprintf(&sb, "Ready: %d\n", status.Counts.Ready)
-	fmt.Fprintf(&sb, "Blocked: %d\n", status.Counts.Blocked)
-	fmt.Fprintf(&sb, "Failed: %d\n", status.Counts.Failed)
-	fmt.Fprintf(&sb, "Skipped: %d\n", status.Counts.Skipped)
+	_, _ = fmt.Fprintf(&sb, "Total: %d\n", status.Counts.Total)
+	_, _ = fmt.Fprintf(&sb, "Completed: %d\n", status.Counts.Completed)
+	_, _ = fmt.Fprintf(&sb, "Ready: %d\n", status.Counts.Ready)
+	_, _ = fmt.Fprintf(&sb, "Blocked: %d\n", status.Counts.Blocked)
+	_, _ = fmt.Fprintf(&sb, "Failed: %d\n", status.Counts.Failed)
+	_, _ = fmt.Fprintf(&sb, "Skipped: %d\n", status.Counts.Skipped)
 	sb.WriteString("\n")
 
 	// Next task
 	sb.WriteString("### Next Task\n")
 	if status.NextTask != nil {
-		fmt.Fprintf(&sb, "Next Task: %s (%s)\n", status.NextTask.ID, status.NextTask.Title)
+		_, _ = fmt.Fprintf(&sb, "Next Task: %s (%s)\n", status.NextTask.ID, status.NextTask.Title)
 	} else {
 		sb.WriteString("Next Task: none\n")
 	}
@@ -236,17 +236,17 @@ func FormatStatus(status *Status) string {
 	// Last iteration
 	if status.LastIteration != nil {
 		sb.WriteString("### Last Iteration\n")
-		fmt.Fprintf(&sb, "ID: %s\n", status.LastIteration.IterationID)
-		fmt.Fprintf(&sb, "Task: %s\n", status.LastIteration.TaskID)
+		_, _ = fmt.Fprintf(&sb, "ID: %s\n", status.LastIteration.IterationID)
+		_, _ = fmt.Fprintf(&sb, "Task: %s\n", status.LastIteration.TaskID)
 		if status.LastIteration.TaskTitle != "" {
-			fmt.Fprintf(&sb, "Title: %s\n", status.LastIteration.TaskTitle)
+			_, _ = fmt.Fprintf(&sb, "Title: %s\n", status.LastIteration.TaskTitle)
 		}
-		fmt.Fprintf(&sb, "Outcome: %s\n", status.LastIteration.Outcome)
+		_, _ = fmt.Fprintf(&sb, "Outcome: %s\n", status.LastIteration.Outcome)
 		if !status.LastIteration.EndTime.IsZero() {
-			fmt.Fprintf(&sb, "Completed: %s\n", status.LastIteration.EndTime.Format(time.RFC3339))
+			_, _ = fmt.Fprintf(&sb, "Completed: %s\n", status.LastIteration.EndTime.Format(time.RFC3339))
 		}
 		if status.LastIteration.LogPath != "" {
-			fmt.Fprintf(&sb, "Log: %s\n", status.LastIteration.LogPath)
+			_, _ = fmt.Fprintf(&sb, "Log: %s\n", status.LastIteration.LogPath)
 		}
 	}
 

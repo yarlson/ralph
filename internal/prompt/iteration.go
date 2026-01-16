@@ -131,16 +131,16 @@ func (b *Builder) BuildUserPrompt(ctx IterationContext) (string, error) {
 	var sb strings.Builder
 
 	// Task header
-	fmt.Fprintf(&sb, "## Task: %s\n\n", ctx.Task.Title)
+	_, _ = fmt.Fprintf(&sb, "## Task: %s\n\n", ctx.Task.Title)
 
 	// Description
-	fmt.Fprintf(&sb, "### Description\n%s\n\n", ctx.Task.Description)
+	_, _ = fmt.Fprintf(&sb, "### Description\n%s\n\n", ctx.Task.Description)
 
 	// Acceptance criteria
 	if len(ctx.Task.Acceptance) > 0 {
 		sb.WriteString("### Acceptance Criteria\n")
 		for _, a := range ctx.Task.Acceptance {
-			fmt.Fprintf(&sb, "- %s\n", a)
+			_, _ = fmt.Fprintf(&sb, "- %s\n", a)
 		}
 		sb.WriteString("\n")
 	}
@@ -150,7 +150,7 @@ func (b *Builder) BuildUserPrompt(ctx IterationContext) (string, error) {
 		sb.WriteString("### Verification Commands\n")
 		sb.WriteString("Run these commands to verify your changes:\n")
 		for _, v := range ctx.Task.Verify {
-			fmt.Fprintf(&sb, "- `%s`\n", strings.Join(v, " "))
+			_, _ = fmt.Fprintf(&sb, "- `%s`\n", strings.Join(v, " "))
 		}
 		sb.WriteString("\n")
 	}
@@ -176,7 +176,7 @@ func (b *Builder) BuildUserPrompt(ctx IterationContext) (string, error) {
 		if len(ctx.ChangedFiles) > 0 {
 			sb.WriteString("Changed files:\n")
 			for _, f := range ctx.ChangedFiles {
-				fmt.Fprintf(&sb, "- `%s`\n", f)
+				_, _ = fmt.Fprintf(&sb, "- `%s`\n", f)
 			}
 		}
 		sb.WriteString("\n")

@@ -43,6 +43,7 @@ gofmt -w .
 ### Claude Code Integration
 
 ClaudeRunner executes Claude Code as a subprocess with `--output-format="stream-json"`. Key parsing:
+
 - `system/init`: Extract `session_id`, `model`, `cwd`
 - `assistant/message`: Accumulate streamed text
 - `result/success` or `result/error`: Terminal event with `result`, `total_cost_usd`, `usage`
@@ -77,6 +78,7 @@ Follow Effective Go and Go Proverbs. Key principles:
 3. **Refactor**: Clean up the code while keeping tests green
 
 Rules:
+
 - No production code without a corresponding test written first
 - Run tests after each change to verify the cycle
 - Commit tests and implementation together

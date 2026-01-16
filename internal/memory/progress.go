@@ -109,13 +109,13 @@ func (e *IterationEntry) Format(timestamp time.Time) string {
 	var sb strings.Builder
 
 	// Header with date, task ID, and title
-	fmt.Fprintf(&sb, "### %s: %s (%s)\n\n",
+	_, _ = fmt.Fprintf(&sb, "### %s: %s (%s)\n\n",
 		timestamp.Format("2006-01-02"), e.TaskID, e.TaskTitle)
 
 	// What changed (always present)
 	sb.WriteString("**What changed:**\n")
 	for _, change := range e.WhatChanged {
-		fmt.Fprintf(&sb, "- %s\n", change)
+		_, _ = fmt.Fprintf(&sb, "- %s\n", change)
 	}
 	sb.WriteString("\n")
 
@@ -123,7 +123,7 @@ func (e *IterationEntry) Format(timestamp time.Time) string {
 	if len(e.FilesTouched) > 0 {
 		sb.WriteString("**Files touched:**\n")
 		for _, file := range e.FilesTouched {
-			fmt.Fprintf(&sb, "- `%s`\n", file)
+			_, _ = fmt.Fprintf(&sb, "- `%s`\n", file)
 		}
 		sb.WriteString("\n")
 	}
@@ -132,13 +132,13 @@ func (e *IterationEntry) Format(timestamp time.Time) string {
 	if len(e.Learnings) > 0 {
 		sb.WriteString("**Learnings:**\n")
 		for _, learning := range e.Learnings {
-			fmt.Fprintf(&sb, "- %s\n", learning)
+			_, _ = fmt.Fprintf(&sb, "- %s\n", learning)
 		}
 		sb.WriteString("\n")
 	}
 
 	// Outcome
-	fmt.Fprintf(&sb, "**Outcome**: %s\n\n", e.Outcome)
+	_, _ = fmt.Fprintf(&sb, "**Outcome**: %s\n\n", e.Outcome)
 
 	return sb.String()
 }

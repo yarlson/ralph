@@ -278,24 +278,24 @@ func FormatReport(report *Report) string {
 	sb.WriteString("# Feature Report\n\n")
 
 	// Basic info
-	fmt.Fprintf(&sb, "**Parent Task:** %s\n", report.ParentTaskID)
+	_, _ = fmt.Fprintf(&sb, "**Parent Task:** %s\n", report.ParentTaskID)
 	if report.FeatureName != "" {
-		fmt.Fprintf(&sb, "**Feature:** %s\n", report.FeatureName)
+		_, _ = fmt.Fprintf(&sb, "**Feature:** %s\n", report.FeatureName)
 	}
 	sb.WriteString("\n")
 
 	// Summary stats
 	sb.WriteString("## Summary\n\n")
-	fmt.Fprintf(&sb, "- **Iterations:** %d iterations\n", report.TotalIterations)
-	fmt.Fprintf(&sb, "- **Total Cost:** $%.2f\n", report.TotalCostUSD)
+	_, _ = fmt.Fprintf(&sb, "- **Iterations:** %d iterations\n", report.TotalIterations)
+	_, _ = fmt.Fprintf(&sb, "- **Total Cost:** $%.2f\n", report.TotalCostUSD)
 	if report.TotalDuration > 0 {
-		fmt.Fprintf(&sb, "- **Duration:** %s\n", formatDuration(report.TotalDuration))
+		_, _ = fmt.Fprintf(&sb, "- **Duration:** %s\n", formatDuration(report.TotalDuration))
 	}
 	if !report.StartTime.IsZero() {
-		fmt.Fprintf(&sb, "- **Started:** %s\n", report.StartTime.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(&sb, "- **Started:** %s\n", report.StartTime.Format(time.RFC3339))
 	}
 	if !report.EndTime.IsZero() {
-		fmt.Fprintf(&sb, "- **Completed:** %s\n", report.EndTime.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(&sb, "- **Completed:** %s\n", report.EndTime.Format(time.RFC3339))
 	}
 	sb.WriteString("\n")
 
@@ -309,7 +309,7 @@ func FormatReport(report *Report) string {
 			if len(hash) > 7 {
 				hash = hash[:7]
 			}
-			fmt.Fprintf(&sb, "- `%s` %s (task: %s)\n", hash, commit.Message, commit.TaskID)
+			_, _ = fmt.Fprintf(&sb, "- `%s` %s (task: %s)\n", hash, commit.Message, commit.TaskID)
 		}
 	}
 	sb.WriteString("\n")
@@ -320,7 +320,7 @@ func FormatReport(report *Report) string {
 		sb.WriteString("No completed tasks.\n")
 	} else {
 		for _, task := range report.CompletedTasks {
-			fmt.Fprintf(&sb, "- [x] %s (%s)\n", task.Title, task.ID)
+			_, _ = fmt.Fprintf(&sb, "- [x] %s (%s)\n", task.Title, task.ID)
 		}
 	}
 	sb.WriteString("\n")
@@ -329,8 +329,8 @@ func FormatReport(report *Report) string {
 	if len(report.BlockedTasks) > 0 {
 		sb.WriteString("## Blocked Tasks\n\n")
 		for _, task := range report.BlockedTasks {
-			fmt.Fprintf(&sb, "- [ ] %s (%s)\n", task.Title, task.ID)
-			fmt.Fprintf(&sb, "      Reason: %s\n", task.Reason)
+			_, _ = fmt.Fprintf(&sb, "- [ ] %s (%s)\n", task.Title, task.ID)
+			_, _ = fmt.Fprintf(&sb, "      Reason: %s\n", task.Reason)
 		}
 		sb.WriteString("\n")
 	}
@@ -339,7 +339,7 @@ func FormatReport(report *Report) string {
 	if len(report.FailedTasks) > 0 {
 		sb.WriteString("## Failed Tasks\n\n")
 		for _, task := range report.FailedTasks {
-			fmt.Fprintf(&sb, "- [!] %s (%s)\n", task.Title, task.ID)
+			_, _ = fmt.Fprintf(&sb, "- [!] %s (%s)\n", task.Title, task.ID)
 		}
 		sb.WriteString("\n")
 	}
@@ -348,7 +348,7 @@ func FormatReport(report *Report) string {
 	if len(report.SkippedTasks) > 0 {
 		sb.WriteString("## Skipped Tasks\n\n")
 		for _, task := range report.SkippedTasks {
-			fmt.Fprintf(&sb, "- [-] %s (%s)\n", task.Title, task.ID)
+			_, _ = fmt.Fprintf(&sb, "- [-] %s (%s)\n", task.Title, task.ID)
 		}
 		sb.WriteString("\n")
 	}

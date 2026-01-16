@@ -20,17 +20,20 @@
 ### 2026-01-16: project-setup-config (Configuration Loading)
 
 **What changed:**
+
 - Created `internal/config` package with full configuration support
 - Implemented `Config` struct matching PRD `ralph.yaml` schema with nested structs: `RepoConfig`, `TasksConfig`, `MemoryConfig`, `ClaudeConfig`, `VerificationConfig`, `LoopConfig`, `GutterConfig`, `SafetyConfig`
 - Implemented `LoadConfig(dir)` function using Viper for YAML parsing with sensible defaults
 - Added `LoadConfigFromPath(configPath)` helper
 
 **Files touched:**
+
 - `internal/config/config.go` (new)
 - `internal/config/config_test.go` (new)
 - `go.mod` / `go.sum` (updated with viper, testify dependencies)
 
 **Learnings:**
+
 - Viper requires `mapstructure` struct tags, not `yaml` tags, for `Unmarshal()` to work correctly
 - `viper.ConfigFileNotFoundError` type assertion needed to distinguish "no config" from "bad config"
 - Nested config structs work well with dot notation in `SetDefault()` (e.g., `loop.gutter.max_same_failure`)
@@ -40,6 +43,7 @@
 ### 2026-01-16: project-setup-cli-skeleton (Cobra CLI Skeleton)
 
 **What changed:**
+
 - Created `cmd/` package with Cobra-based CLI
 - Implemented `NewRootCmd()` returning root command with `--config` flag
 - Added 8 stub subcommands: init, run, status, pause, resume, retry, skip, report
@@ -48,12 +52,14 @@
 - Added `Execute()` function for main entrypoint
 
 **Files touched:**
+
 - `cmd/root.go` (new)
 - `cmd/root_test.go` (new)
 - `main.go` (new)
 - `go.mod` / `go.sum` (updated with cobra dependency)
 
 **Learnings:**
+
 - Cobra's `SilenceUsage: true` prevents usage from printing on every error
 - Use `cmd.SetOut()` and `cmd.SetErr()` in tests to capture output
 - Wrap stub errors with `fmt.Errorf("cmd: %w", errNotImplemented)` for consistent error messages
@@ -63,16 +69,19 @@
 ### 2026-01-16: project-setup-ralph-dir (.ralph Directory Structure)
 
 **What changed:**
+
 - Created `internal/state` package for directory structure management
 - Implemented `EnsureRalphDir(root)` function that creates the full `.ralph/` directory tree
 - Added path helper functions: `RalphDirPath`, `TasksDirPath`, `StateDirPath`, `LogsDirPath`, `ClaudeLogsDirPath`, `ArchiveDirPath`
 - Function is idempotent and creates directories with 0755 permissions
 
 **Files touched:**
+
 - `internal/state/state.go` (new)
 - `internal/state/state_test.go` (new)
 
 **Learnings:**
+
 - `os.MkdirAll` is naturally idempotent - it succeeds even if directories already exist
 - Checking root existence before creating subdirs gives clearer error messages
 - Use `t.TempDir()` for filesystem tests - it auto-cleans up
@@ -82,18 +91,21 @@
 ### 2026-01-16: task-store-model (Task Model Definition)
 
 **What changed:**
+
 - Created `internal/taskstore` package with Task model and TaskStatus type
-- Implemented `Task` struct with all required fields: ID, Title, Description, ParentID (*string), DependsOn, Status, Acceptance, Verify, Labels, CreatedAt, UpdatedAt
+- Implemented `Task` struct with all required fields: ID, Title, Description, ParentID (\*string), DependsOn, Status, Acceptance, Verify, Labels, CreatedAt, UpdatedAt
 - Implemented `TaskStatus` type as string enum with values: open, in_progress, completed, blocked, failed, skipped
 - Added `IsValid()` method on TaskStatus for validation
 - Added `Validate()` method on Task that checks required fields and valid status
 - Full JSON serialization support with appropriate tags and omitempty for optional fields
 
 **Files touched:**
+
 - `internal/taskstore/model.go` (new)
 - `internal/taskstore/model_test.go` (new)
 
 **Learnings:**
+
 - Use `*string` for optional parent ID to distinguish "no parent" (nil) from empty string
 - Using a map for status validation (`validStatuses`) provides O(1) lookup for `IsValid()`
 - JSON tags with `omitempty` keep serialized output clean for optional fields
@@ -104,16 +116,19 @@
 ### 2026-01-16: task-store-interface (TaskStore Interface)
 
 **What changed:**
+
 - Defined `Store` interface in `internal/taskstore/store.go` with all required CRUD methods
 - Implemented `NotFoundError` type that wraps `ErrNotFound` sentinel with task ID
 - Implemented `ValidationError` type that wraps `ErrValidation` sentinel with task ID and reason
 - Both error types implement `Unwrap()` for use with `errors.Is()` and `errors.As()`
 
 **Files touched:**
+
 - `internal/taskstore/store.go` (new)
 - `internal/taskstore/store_test.go` (new)
 
 **Learnings:**
+
 - Go error wrapping pattern: define sentinel errors (`var ErrNotFound = errors.New(...)`) and wrap them in typed errors that implement `Unwrap()` returning the sentinel
 - Use `errors.Join()` in tests to verify that `errors.Is()` and `errors.As()` work through wrapped error chains
 - Interface naming: using `Store` instead of `TaskStore` since the package is already `taskstore`, avoiding stutter (`taskstore.TaskStore` vs `taskstore.Store`)
@@ -123,6 +138,7 @@
 ### 2026-01-16: task-store-local (Local File Store Implementation)
 
 **What changed:**
+
 - Implemented `LocalStore` struct in `internal/taskstore/local.go` that implements the `Store` interface
 - Tasks persisted as individual JSON files in configured directory (`.ralph/tasks/{id}.json`)
 - Atomic writes using temp file + rename pattern to prevent corruption
@@ -130,10 +146,12 @@
 - `NewLocalStore(dir)` constructor creates directory if not exists
 
 **Files touched:**
+
 - `internal/taskstore/local.go` (new)
 - `internal/taskstore/local_test.go` (new)
 
 **Learnings:**
+
 - Use `sync.RWMutex` with `RLock()` for reads and `Lock()` for writes to allow concurrent reads
 - Internal `getUnlocked()` helper allows code reuse when caller already holds a lock (e.g., `UpdateStatus` calls it after acquiring write lock)
 - Atomic write pattern: write to `.tmp` file, then `os.Rename()` - rename is atomic on POSIX systems
@@ -144,19 +162,22 @@
 ### 2026-01-16: task-store-yaml-import (YAML Task Import)
 
 **What changed:**
+
 - Implemented `ImportFromYAML(store, path)` function in `internal/taskstore/yaml.go`
 - Created `YAMLTask` and `YAMLFile` structs for YAML parsing with appropriate tags
 - Created `ImportResult` and `ImportError` types to report import results
 - Function validates all tasks before importing, reports errors with task IDs
 - Defaults status to "open" if not specified in YAML
 - Updates existing tasks if task ID already exists in store
-- Converts YAML field names (parentId) to internal model (*string ParentID)
+- Converts YAML field names (parentId) to internal model (\*string ParentID)
 
 **Files touched:**
+
 - `internal/taskstore/yaml.go` (new)
 - `internal/taskstore/yaml_test.go` (new)
 
 **Learnings:**
+
 - Use `gopkg.in/yaml.v3` directly for YAML parsing (simpler than Viper for this use case)
 - YAML struct tags use camelCase field names (parentId, dependsOn) to match tasks.yaml format
 - Separate YAML struct from internal model allows for field name translation and default application
@@ -167,6 +188,7 @@
 ### 2026-01-16: selector-dependency-graph (Dependency Graph Builder)
 
 **What changed:**
+
 - Created `internal/selector` package with dependency graph implementation
 - Implemented `Graph` struct with nodes, edges (dependencies), and reverseEdges (dependents)
 - Implemented `BuildGraph(tasks)` function that constructs graph from task list and validates all dependencies exist
@@ -175,10 +197,12 @@
 - Added helper methods: `Nodes()`, `HasNode()`, `Dependencies()`, `Dependents()`
 
 **Files touched:**
+
 - `internal/selector/graph.go` (new)
 - `internal/selector/graph_test.go` (new)
 
 **Learnings:**
+
 - DFS cycle detection with coloring: white=unvisited, gray=in current path, black=fully explored; back-edge to gray node indicates cycle
 - Kahn's algorithm for topo sort: start with nodes that have no dependencies (inDegree=0), process them, decrement dependents' inDegree, repeat
 - Graph edges point from task to its dependencies (what it depends ON), reverse edges track what depends on a given task
@@ -189,16 +213,19 @@
 ### 2026-01-16: selector-ready-computation (Ready Task Computation)
 
 **What changed:**
+
 - Implemented `ComputeReady(tasks, graph)` function that computes ready status for each task
 - A task is ready if all its dependencies (from dependsOn) are completed
 - Implemented `IsLeaf(tasks, taskID)` function to identify leaf tasks (tasks with no children)
 - Implemented `GetReadyLeaves(tasks, graph)` function that filters tasks by: status=open AND ready=true AND isLeaf=true
 
 **Files touched:**
+
 - `internal/selector/ready.go` (new)
 - `internal/selector/ready_test.go` (new)
 
 **Learnings:**
+
 - Build status lookup map first for O(1) dependency status checks
 - IsLeaf checks parentID references across all tasks - a task is a leaf if no other task has it as parentID
 - GetReadyLeaves applies three filters sequentially: open status, ready (all deps completed), and leaf (no children)
@@ -209,16 +236,19 @@
 ### 2026-01-16: selector-select-next (Next Task Selection)
 
 **What changed:**
+
 - Implemented `SelectNext(tasks, graph, parentID, lastCompleted)` function in `internal/selector/selector.go`
 - Function gathers descendants of the parent task, computes ready leaves, and selects the next task
 - Selection heuristics: 1) prefer tasks with same "area" label as last completed task, 2) deterministic ordering by createdAt then ID
 - Added helper functions: `getDescendants()` (BFS traversal), `getReadyLeavesFromSubset()`, `sortTasksDeterministically()`, `getArea()`
 
 **Files touched:**
+
 - `internal/selector/selector.go` (new)
 - `internal/selector/selector_test.go` (new)
 
 **Learnings:**
+
 - Use BFS with parent-to-children map to efficiently gather all descendants of a parent task
 - Area preference heuristic: if multiple ready leaves exist and last completed task has an "area" label, prefer tasks with matching area
 - Deterministic ordering uses `sort.Slice` with two-level comparison: first by CreatedAt, then by ID for tie-breaking
@@ -229,6 +259,7 @@
 ### 2026-01-16: claude-runner-interface (ClaudeRunner Interface)
 
 **What changed:**
+
 - Created `internal/claude` package for Claude Code integration
 - Implemented `ClaudeRequest` struct with fields: Cwd, SystemPrompt, AllowedTools, Prompt, Continue, ExtraArgs, Env
 - Implemented `ClaudeResponse` struct with fields: SessionID, Model, Version, FinalText, StreamText, Usage, TotalCostUSD, PermissionDenials, RawEventsPath
@@ -237,10 +268,12 @@
 - All types have JSON tags for logging and serialization
 
 **Files touched:**
+
 - `internal/claude/runner.go` (new)
 - `internal/claude/runner_test.go` (new)
 
 **Learnings:**
+
 - Interface naming: `Runner` instead of `ClaudeRunner` to avoid stutter in package (`claude.Runner` vs `claude.ClaudeRunner`)
 - The CLAUDE-CODE.md spec defines the exact contract for request/response types - follow it closely
 - Context parameter in interface allows for cancellation/timeout support
@@ -251,6 +284,7 @@
 ### 2026-01-16: claude-runner-ndjson-parser (NDJSON Stream Parser)
 
 **What changed:**
+
 - Implemented NDJSON parser in `internal/claude/parser.go` for Claude Code's stream-json output
 - Created `ParseResult` struct to hold extracted data: SessionID, Model, Version, Cwd, FinalText, StreamText, Usage, TotalCostUSD, DurationMS, NumTurns, IsError, PermissionDenials, ParseErrors
 - Created internal event structs for parsing: `baseEvent`, `initEvent`, `assistantEvent`, `contentBlock`, `usageBlock`, `resultEvent`
@@ -259,10 +293,12 @@
 - Gracefully handles parse errors - continues parsing and records errors, fails only if no terminal result
 
 **Files touched:**
+
 - `internal/claude/parser.go` (new)
 - `internal/claude/parser_test.go` (new)
 
 **Learnings:**
+
 - Use `bufio.Scanner.Buffer()` to configure scanner for large lines - default token limit is too small for large JSON
 - Parse each line independently into `baseEvent` first to determine type, then unmarshal into specific struct
 - Accumulate text from assistant/message content blocks using `strings.Builder` for efficiency
@@ -274,6 +310,7 @@
 ### 2026-01-16: claude-runner-subprocess (Subprocess Execution)
 
 **What changed:**
+
 - Implemented `SubprocessRunner` struct in `internal/claude/exec.go` that implements the `Runner` interface
 - `NewSubprocessRunner(command, logsDir)` constructor for creating runner instances with configurable Claude binary and log directory
 - `Run(ctx, req)` method executes Claude Code as subprocess with proper argument building
@@ -285,10 +322,12 @@
 - Raw NDJSON logs saved to configured logs directory
 
 **Files touched:**
+
 - `internal/claude/exec.go` (new)
 - `internal/claude/exec_test.go` (new)
 
 **Learnings:**
+
 - Use `exec.CommandContext` for context-aware subprocess execution with automatic process kill on cancellation
 - `io.TeeReader` allows simultaneous writing to log file while buffering for parser
 - Sanitize task IDs for filenames using regex to replace invalid characters (slashes, spaces, etc.)
@@ -300,6 +339,7 @@
 ### 2026-01-16: claude-runner-session-state (Session State Management)
 
 **What changed:**
+
 - Implemented `SessionState` struct in `internal/claude/session.go` with `PlannerSessionID`, `CoderSessionID`, and `UpdatedAt` fields
 - Created `SessionMode` type with constants `SessionModePlanner` and `SessionModeCoder` for tracking separate session contexts
 - Implemented `LoadSession(path)` function that loads session state from JSON file (returns empty state if file doesn't exist)
@@ -308,10 +348,12 @@
 - Added helper methods: `UpdatePlannerSession()`, `UpdateCoderSession()`, `GetSessionForMode()`, `UpdateSessionForMode()`
 
 **Files touched:**
+
 - `internal/claude/session.go` (new)
 - `internal/claude/session_test.go` (new)
 
 **Learnings:**
+
 - Separate session IDs for planner vs coder allows different --continue contexts for different workflows
 - Fork detection is useful when Claude Code starts a new session instead of continuing (e.g., context too long)
 - Go's `errors.Is(err, os.ErrNotExist)` is the idiomatic way to check for file-not-found vs other read errors
@@ -322,6 +364,7 @@
 ### 2026-01-16: verifier-interface (Verifier Interface)
 
 **What changed:**
+
 - Created `internal/verifier` package for verification command execution
 - Implemented `VerificationResult` struct with fields: Passed (bool), Command ([]string), Output (string), Duration (time.Duration)
 - Defined `Verifier` interface with `Verify(ctx, commands [][]string)` and `VerifyTask(ctx, commands [][]string)` methods
@@ -329,19 +372,22 @@
 - All types have JSON tags for logging and serialization
 
 **Files touched:**
+
 - `internal/verifier/verifier.go` (new)
 - `internal/verifier/verifier_test.go` (new)
 
 **Learnings:**
+
 - Interface naming: `Verifier` is appropriate here since it's the primary interface in the package
 - TDD approach: wrote 9 tests first covering struct defaults, all fields, JSON serialization, interface implementation via mock, and context cancellation/timeout
-- `VerifyTask` takes commands directly ([][]string) rather than *Task to avoid coupling verifier package to taskstore package - keeps interface clean and testable
+- `VerifyTask` takes commands directly ([][]string) rather than \*Task to avoid coupling verifier package to taskstore package - keeps interface clean and testable
 
 **Outcome**: Success - all 9 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
 
 ### 2026-01-16: verifier-command-runner (Command Runner)
 
 **What changed:**
+
 - Implemented `CommandRunner` struct in `internal/verifier/runner.go` that implements the `Verifier` interface
 - `NewCommandRunner(workDir)` constructor creates runner with optional working directory
 - Commands executed as subprocesses using `exec.CommandContext` for context-aware timeout/cancellation
@@ -352,10 +398,12 @@
 - Proper handling of edge cases: empty commands, non-existent commands, context cancellation
 
 **Files touched:**
+
 - `internal/verifier/runner.go` (new)
 - `internal/verifier/runner_test.go` (new)
 
 **Learnings:**
+
 - Use `exec.CommandContext` for subprocess execution with automatic process termination on context cancellation
 - Allowlist should check base command name only (e.g., "go" in "go test ./...")
 - Return failure result with descriptive output rather than error for blocked/invalid commands - keeps sequential execution intact
@@ -366,6 +414,7 @@
 ### 2026-01-16: verifier-output-trimmer (Output Trimmer for Feedback)
 
 **What changed:**
+
 - Implemented `TrimOutput(output, opts)` function in `internal/verifier/trimmer.go`
 - Created `TrimOptions` struct with `MaxLines` and `MaxBytes` configurable limits
 - Trimming preserves the tail (end) of output since error messages typically appear at the end
@@ -375,10 +424,12 @@
 - Added `Validate()` method on TrimOptions to check for negative values
 
 **Files touched:**
+
 - `internal/verifier/trimmer.go` (new)
 - `internal/verifier/trimmer_test.go` (new)
 
 **Learnings:**
+
 - Preserving tail of output is more useful for error feedback than preserving head - errors and failures typically appear at the end of verification output
 - When applying both line and byte limits, apply line limit first then byte limit - this gives most predictable results
 - Use Go's built-in `max()` function instead of manual if-else for cleaner code (Go 1.21+)
@@ -389,6 +440,7 @@
 ### 2026-01-16: git-manager-interface (GitManager Interface)
 
 **What changed:**
+
 - Created `internal/git` package for Git operations
 - Defined `Manager` interface with 7 methods: `EnsureBranch`, `GetCurrentCommit`, `HasChanges`, `GetDiffStat`, `GetChangedFiles`, `Commit`, `GetCurrentBranch`
 - All methods accept `context.Context` for cancellation/timeout support
@@ -397,10 +449,12 @@
 - `GitError` implements `Unwrap()` for use with `errors.Is()` and `errors.As()`
 
 **Files touched:**
+
 - `internal/git/manager.go` (new)
 - `internal/git/manager_test.go` (new)
 
 **Learnings:**
+
 - Interface naming: `Manager` avoids stutter in package (`git.Manager` vs `git.GitManager`)
 - All interface methods should accept `context.Context` as first parameter for proper cancellation support
 - Sentinel errors with typed wrapper errors (like `GitError`) provide both convenient `errors.Is()` checks and detailed error context
@@ -411,6 +465,7 @@
 ### 2026-01-16: git-manager-shell (Git Shell Implementation)
 
 **What changed:**
+
 - Implemented `ShellManager` struct in `internal/git/shell.go` that implements the `Manager` interface
 - `NewShellManager(workDir, branchPrefix)` constructor creates manager with configurable working directory and branch prefix
 - Implemented `runGit(ctx, args...)` helper method that shells out to git binary with proper error handling
@@ -421,10 +476,12 @@
 - `Commit` method stages all changes with `git add -A` before committing
 
 **Files touched:**
+
 - `internal/git/shell.go` (new)
 - `internal/git/shell_test.go` (new)
 
 **Learnings:**
+
 - Test setup for git operations requires disabling GPG signing (`git config commit.gpgsign false`) when system has signing configured
 - Use `git init -b main` to ensure consistent default branch name across different git configurations
 - `git diff --stat` outputs "warning: Not a git repository" (capital N) vs other commands that use lowercase - need case-insensitive matching
@@ -437,6 +494,7 @@
 ### 2026-01-16: git-manager-commit-template (Commit Message Templates)
 
 **What changed:**
+
 - Implemented commit message formatting in `internal/git/commit.go`
 - Created `CommitType` type with constants: `CommitTypeFeat`, `CommitTypeFix`, `CommitTypeChore`
 - Implemented `InferCommitType(title)` that analyzes task title keywords to determine commit type:
@@ -451,10 +509,12 @@
 - Message format: `<type>: <title>\n\nRalph iteration: <iterationID>`
 
 **Files touched:**
+
 - `internal/git/commit.go` (new)
 - `internal/git/commit_test.go` (new)
 
 **Learnings:**
+
 - Use `strings.Cut()` instead of `strings.Index()` + manual slicing for cleaner code (Go 1.18+)
 - Keyword matching with `strings.HasPrefix` for case-insensitive detection (after lowercasing)
 - Conventional commit parsing: split on first colon, then handle optional body after blank line
@@ -465,6 +525,7 @@
 ### 2026-01-16: memory-manager-progress (Progress File Management)
 
 **What changed:**
+
 - Created `internal/memory` package for progress and memory file management
 - Implemented `ProgressFile` struct with `NewProgressFile(path)` constructor
 - Implemented `IterationEntry` struct for representing iteration log entries
@@ -478,10 +539,12 @@
 - `Exists()` and `Path()` helper methods
 
 **Files touched:**
+
 - `internal/memory/progress.go` (new)
 - `internal/memory/progress_test.go` (new)
 
 **Learnings:**
+
 - Use `strings.Cut()` for extracting sections between markers - cleaner than manual Index + slicing
 - Use `fmt.Fprintf(&sb, ...)` instead of `sb.WriteString(fmt.Sprintf(...))` for better linter compliance
 - Use built-in `min()` and `max()` functions (Go 1.21+) instead of if-else statements
@@ -493,6 +556,7 @@
 ### 2026-01-16: memory-manager-archive (Progress Archive)
 
 **What changed:**
+
 - Implemented `ProgressArchive` struct in `internal/memory/archive.go` for archiving progress files
 - `NewProgressArchive(archiveDir)` constructor creates archive manager with configurable directory
 - `Archive(progressPath)` moves progress file to archive directory with timestamped filename
@@ -503,10 +567,12 @@
 - Creates archive directory if it doesn't exist
 
 **Files touched:**
+
 - `internal/memory/archive.go` (new)
 - `internal/memory/archive_test.go` (new)
 
 **Learnings:**
+
 - Second-precision timestamps can cause collisions in rapid-fire tests; handle by appending counter suffix
 - Use `os.IsNotExist(err)` for file existence checks rather than `errors.Is(err, os.ErrNotExist)` when working with `os.Stat` errors
 - Archive pattern: read source, write to destination, then remove source (safer than rename which may fail across filesystems)
@@ -517,6 +583,7 @@
 ### 2026-01-16: loop-controller-iteration-record (Iteration Record Model)
 
 **What changed:**
+
 - Created `internal/loop` package for iteration orchestration
 - Implemented `IterationRecord` struct with all required fields: IterationID, TaskID, StartTime, EndTime, ClaudeInvocation, BaseCommit, ResultCommit, VerificationOutputs, FilesChanged, Outcome, Feedback
 - Implemented `IterationOutcome` type with values: success, failed, budget_exceeded, blocked
@@ -527,11 +594,13 @@
 - Full JSON serialization support for logging and persistence
 
 **Files touched:**
+
 - `internal/loop/record.go` (new)
 - `internal/loop/record_test.go` (new)
 - `go.mod` / `go.sum` (added github.com/google/uuid dependency)
 
 **Learnings:**
+
 - Use `github.com/google/uuid` for generating unique IDs; slice first 8 characters for readable iteration IDs
 - `SaveRecord` creates directory if not exists using `os.MkdirAll`
 - TDD approach: wrote 26 tests first covering outcome validity, record defaults, all fields, JSON serialization, duration calculation, completion, feedback, save/load functionality, and verification pass aggregation
@@ -541,6 +610,7 @@
 ### 2026-01-16: loop-controller-budget (Budget Tracking)
 
 **What changed:**
+
 - Implemented budget tracking in `internal/loop/budget.go`
 - Created `BudgetLimits` struct with configurable limits: MaxIterations, MaxTimeMinutes, MaxCostUSD, MaxMinutesPerIteration
 - Created `BudgetState` struct for tracking consumption: Iterations, TotalCostUSD, StartTime
@@ -553,10 +623,12 @@
 - Budget checks evaluate in priority order: iterations, time, cost
 
 **Files touched:**
+
 - `internal/loop/budget.go` (new)
 - `internal/loop/budget_test.go` (new)
 
 **Learnings:**
+
 - Zero values for limits allow "unlimited" behavior without special sentinel values
 - Start time is set on first RecordIteration() call, not on construction, allowing for lazy initialization
 - LoadBudget returns empty state (not error) when file doesn't exist - enables clean first-run behavior
@@ -568,6 +640,7 @@
 ### 2026-01-16: loop-controller-gutter (Gutter Detection)
 
 **What changed:**
+
 - Implemented gutter detection in `internal/loop/gutter.go`
 - Created `GutterReason` type with values: none, repeated_failure, file_churn, oscillation
 - Created `GutterConfig` struct with configurable thresholds: MaxSameFailure, MaxChurnIterations, ChurnThreshold
@@ -581,10 +654,12 @@
 - Zero values for thresholds disable that detection type
 
 **Files touched:**
+
 - `internal/loop/gutter.go` (new)
 - `internal/loop/gutter_test.go` (new)
 
 **Learnings:**
+
 - Use SHA256 hash of sorted failure outputs for consistent signature computation
 - Churn detection needs to track file changes across a sliding window of recent iterations (not all time)
 - Copy maps and slices in GetState/SetState to prevent external mutation of internal state
@@ -595,6 +670,7 @@
 ### 2026-01-16: loop-controller-orchestrator (Main Loop Orchestrator)
 
 **What changed:**
+
 - Implemented `Controller` struct in `internal/loop/controller.go` that orchestrates the main iteration loop
 - Created `ControllerDeps` struct for dependency injection: TaskStore, Claude Runner, Verifier, Git Manager, ProgressFile
 - Created `RunLoopOutcome` type with values: completed, blocked, budget_exceeded, gutter_detected, paused, error
@@ -617,10 +693,12 @@
 - Added `SetBudgetLimits()` and `SetGutterConfig()` for configuration
 
 **Files touched:**
+
 - `internal/loop/controller.go` (new)
 - `internal/loop/controller_test.go` (new)
 
 **Learnings:**
+
 - Need to disable gutter detection in tests when testing multi-task scenarios to avoid false positives from same files being changed
 - When no tasks exist for a parent, returning "completed" (vacuously true) is reasonable behavior
 - Use `dynamicGitManager` mock pattern when different return values are needed per call
@@ -632,6 +710,7 @@
 ### 2026-01-16: reporter-status (Status Generation)
 
 **What changed:**
+
 - Created `internal/reporter` package for status display and report generation
 - Implemented `TaskCounts` struct for aggregating task counts (total, completed, ready, blocked, failed, skipped)
 - Implemented `LastIterationInfo` struct for summarizing last iteration (iterationID, taskID, taskTitle, outcome, endTime, logPath)
@@ -646,10 +725,12 @@
 - Implemented `FormatStatus(status)` for CLI display with markdown-formatted output
 
 **Files touched:**
+
 - `internal/reporter/status.go` (new)
 - `internal/reporter/status_test.go` (new)
 
 **Learnings:**
+
 - Reuse selector package's `GetReadyLeaves` and `SelectNext` for consistent ready task logic
 - Parse iteration log files from `.ralph/logs/` directory to find latest iteration by comparing EndTime
 - BFS traversal with parent-to-children map efficiently gathers all descendants
@@ -660,6 +741,7 @@
 ### 2026-01-16: reporter-report (Feature Report Generation)
 
 **What changed:**
+
 - Implemented `Report` struct in `internal/reporter/report.go` with all required fields: ParentTaskID, FeatureName, Commits, CompletedTasks, BlockedTasks, FailedTasks, SkippedTasks, TotalIterations, TotalCostUSD, TotalDuration, StartTime, EndTime
 - Implemented helper structs: `CommitInfo`, `TaskSummary`, `BlockedTaskSummary`
 - Implemented `ReportGenerator` with `NewReportGenerator(store, logsDir)` constructor
@@ -675,10 +757,12 @@
 - Added `formatDuration(d)` helper for human-readable duration display
 
 **Files touched:**
+
 - `internal/reporter/report.go` (new)
 - `internal/reporter/report_test.go` (new)
 
 **Learnings:**
+
 - Reuse `gatherDescendants()` pattern from status.go for BFS traversal
 - Time comparison in tests requires `WithinDuration` instead of `Equal` due to monotonic clock differences when times are loaded from JSON
 - Blocked reason computation: check dependsOn tasks status, report which dependencies are incomplete
@@ -690,6 +774,7 @@
 ### 2026-01-16: cli-init (ralph init Command)
 
 **What changed:**
+
 - Implemented `ralph init` command in `cmd/init.go`
 - Added `--parent <id>` flag to specify parent task ID directly
 - Added `--search <term>` flag to find parent task by title substring (case-insensitive)
@@ -701,12 +786,14 @@
 - Updated `root_test.go` to remove `init` from stub commands list
 
 **Files touched:**
+
 - `cmd/init.go` (new)
 - `cmd/init_test.go` (new)
 - `cmd/root.go` (removed stub newInitCmd function)
 - `cmd/root_test.go` (updated stub commands list)
 
 **Learnings:**
+
 - Use `cmd.OutOrStdout()` for writing output in Cobra commands to allow capturing in tests
 - Must handle `fmt.Fprintf` return values explicitly to pass errcheck linter (`_, _ = fmt.Fprintf(...)`)
 - Tests need to change working directory (`os.Chdir`) to temp dir since config and state operations are relative to cwd
@@ -718,6 +805,7 @@
 ### 2026-01-16: cli-run (ralph run Command)
 
 **What changed:**
+
 - Implemented `ralph run` command in `cmd/run.go`
 - Added `--once` flag for single iteration mode (invokes `controller.RunOnce`)
 - Added `--max-iterations N` flag to override config limit (0 uses config default)
@@ -730,12 +818,14 @@
 - Removed stub `newRunCmd` from root.go, updated root_test.go to exclude `run` from stub commands
 
 **Files touched:**
+
 - `cmd/run.go` (new)
 - `cmd/run_test.go` (new)
 - `cmd/root.go` (removed stub newRunCmd function)
 - `cmd/root_test.go` (removed "run" from stub commands list)
 
 **Learnings:**
+
 - Use `signal.Notify` with `context.WithCancel` for graceful shutdown pattern
 - `NewSubprocessRunner` takes a single string command, not a slice - extract first element from config
 - Use `cmd.OutOrStdout()` and `cmd.ErrOrStderr()` for proper output handling in tests
@@ -747,6 +837,7 @@
 ### 2026-01-16: cli-status (ralph status Command)
 
 **What changed:**
+
 - Implemented `ralph status` command in `cmd/status.go`
 - Reads parent task ID from `.ralph/parent-task-id` file (requires `ralph init` first)
 - Uses `reporter.StatusGenerator` to gather status information
@@ -757,12 +848,14 @@
 - Removed stub `newStatusCmd` from root.go, updated root_test.go to exclude `status` from stub commands
 
 **Files touched:**
+
 - `cmd/status.go` (new)
 - `cmd/status_test.go` (new)
 - `cmd/root.go` (removed stub newStatusCmd function)
 - `cmd/root_test.go` (removed "status" from stub commands list)
 
 **Learnings:**
+
 - Reuse existing `reporter.StatusGenerator` and `reporter.FormatStatus` for consistent status display
 - Follow same pattern as init/run commands: load config, read parent-task-id, validate parent task exists
 - TDD approach: wrote 12 tests covering command structure, error cases (no parent-task-id, nonexistent parent), various task count scenarios, next task display, last iteration info, and graceful handling of missing data
@@ -772,6 +865,7 @@
 ### 2026-01-16: cli-pause-resume (ralph pause/resume Commands)
 
 **What changed:**
+
 - Implemented `ralph pause` command in `cmd/pause.go` that sets the paused flag
 - Implemented `ralph resume` command in `cmd/resume.go` that clears the paused flag
 - Added `IsPaused(root)`, `SetPaused(root, paused)`, and `PausedFilePath(root)` functions to `internal/state/state.go`
@@ -781,6 +875,7 @@
 - Both commands handle edge cases: pause when already paused (shows message), resume when not paused (shows message)
 
 **Files touched:**
+
 - `internal/state/state.go` (added PausedFile constant, IsPaused, SetPaused, PausedFilePath functions)
 - `internal/state/state_test.go` (added 14 new tests for pause functionality)
 - `cmd/pause.go` (new)
@@ -793,6 +888,7 @@
 - `cmd/root_test.go` (removed pause/resume from stub commands list)
 
 **Learnings:**
+
 - Simple file-based flag pattern (file existence = state) is clean and atomic - no parsing needed
 - Using `errors.Is(err, os.ErrNotExist)` is the idiomatic way to check for missing file
 - The run command checks paused state early (before loading config) to fail fast
@@ -803,6 +899,7 @@
 ### 2026-01-16: cli-retry-skip (ralph retry/skip Commands)
 
 **What changed:**
+
 - Implemented `ralph retry` command in `cmd/retry.go`
 - Implemented `ralph skip` command in `cmd/skip.go`
 - `retry --task <id>` resets task status from failed/blocked/in_progress to open
@@ -815,6 +912,7 @@
 - Removed stub `newRetryCmd()` and `newSkipCmd()` from `cmd/root.go`
 
 **Files touched:**
+
 - `cmd/retry.go` (new)
 - `cmd/retry_test.go` (new)
 - `cmd/skip.go` (new)
@@ -823,6 +921,7 @@
 - `cmd/root_test.go` (removed retry/skip from stub commands list)
 
 **Learnings:**
+
 - Reuse existing `taskstore` package for task retrieval and status updates
 - Use `state.StateDirPath()` for feedback/reason file storage
 - Tasks can be in states: open, in_progress, completed, blocked, failed, skipped
@@ -836,6 +935,7 @@
 ### 2026-01-16: cli-report (ralph report Command)
 
 **What changed:**
+
 - Implemented `ralph report` command in `cmd/report.go`
 - Added `--output, -o` flag to write report to a file instead of stdout
 - Uses `reporter.ReportGenerator` to generate the feature report
@@ -845,12 +945,14 @@
 - Removed stub `newReportCmd` from `cmd/root.go` (all CLI commands now implemented)
 
 **Files touched:**
+
 - `cmd/report.go` (new)
 - `cmd/report_test.go` (new)
 - `cmd/root.go` (removed stub newReportCmd, cleaned up unused imports)
 - `cmd/root_test.go` (removed stub commands test section)
 
 **Learnings:**
+
 - Follow same pattern as init/run/status commands: load config, read parent-task-id, validate parent task exists
 - Reuse existing `reporter.ReportGenerator` and `reporter.FormatReport` for consistent report generation
 - When writing to file, use `os.MkdirAll` on the directory path to ensure parent directories exist
@@ -862,6 +964,7 @@
 ### 2026-01-16: prompt-packager-iteration (Iteration Prompt Builder)
 
 **What changed:**
+
 - Created `internal/prompt` package for prompt packaging for Claude Code iterations
 - Implemented `IterationContext` struct with all required context fields: Task, CodebasePatterns, DiffStat, ChangedFiles, FailureOutput, UserFeedback, IsRetry
 - Implemented `SizeOptions` struct with configurable size limits: MaxPromptBytes, MaxPatternsBytes, MaxDiffBytes, MaxFailureBytes
@@ -880,10 +983,12 @@
 - Added `Validate()` method on SizeOptions to check for negative values
 
 **Files touched:**
+
 - `internal/prompt/iteration.go` (new)
 - `internal/prompt/iteration_test.go` (new)
 
 **Learnings:**
+
 - Use `strings.Builder` with `fmt.Fprintf(&sb, ...)` for efficient string building with linter compliance
 - Zero value for size limits means unlimited (no truncation) - useful for testing without limits
 - Separate system prompt (harness instructions) from user prompt (task context) for clear Claude invocation
@@ -894,6 +999,7 @@
 ### 2026-01-16: prompt-packager-retry (Retry Prompt Builder)
 
 **What changed:**
+
 - Implemented `RetryContext` struct in `internal/prompt/retry.go` with fields: Task, FailureOutput, FailureSignature, UserFeedback, AttemptNumber
 - Implemented `BuildRetrySystemPrompt()` method that returns retry-specific harness instructions emphasizing fix-only approach
 - Implemented `BuildRetryPrompt(ctx)` method that builds the retry user prompt with:
@@ -909,10 +1015,12 @@
 - Reuses existing `truncateWithMarker()` from iteration.go for failure output truncation
 
 **Files touched:**
+
 - `internal/prompt/retry.go` (new)
 - `internal/prompt/retry_test.go` (new)
 
 **Learnings:**
+
 - Retry prompts should have stronger "fix-only" directives than initial prompts - repeated emphasis helps focus Claude on minimal fixes
 - Separate `BuildRetrySystemPrompt()` from `BuildSystemPrompt()` allows different harness instructions for retries vs initial attempts
 - Include attempt number in retry prompts to give context on how many times the task has been attempted
@@ -924,11 +1032,13 @@
 ### 2026-01-16: MVP Completion (All Tasks Completed)
 
 **What changed:**
+
 - All 37 leaf tasks have been completed
 - All 12 container/parent tasks marked as completed in tasks.yaml
 - Ralph Wiggum Loop Harness MVP is now fully implemented
 
 **Summary of completed components:**
+
 1. **Project Setup**: Go module, Cobra CLI skeleton, configuration loading, .ralph directory structure
 2. **Task Store**: Task model, Store interface, LocalStore implementation, YAML import
 3. **Selector**: Dependency graph builder, ready task computation, next task selection with area preference
@@ -942,9 +1052,11 @@
 11. **Prompt Packager**: Iteration prompt builder, retry prompt builder
 
 **Files touched:**
+
 - `tasks.yaml` (marked all container tasks as completed)
 
 **Learnings:**
+
 - Container tasks in task hierarchy are organizational groupings - only leaf tasks are executable
 - When all leaf tasks under a container are completed, the container should be marked completed
 - The Ralph harness is designed to execute only leaf tasks, following PRD section 8.2

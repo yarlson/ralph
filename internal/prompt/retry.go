@@ -67,9 +67,9 @@ func (b *Builder) BuildRetryPrompt(ctx RetryContext) (string, error) {
 
 	// Retry header with attempt number
 	if ctx.AttemptNumber > 0 {
-		fmt.Fprintf(&sb, "## RETRY: %s (attempt %d)\n\n", ctx.Task.Title, ctx.AttemptNumber)
+		_, _ = fmt.Fprintf(&sb, "## RETRY: %s (attempt %d)\n\n", ctx.Task.Title, ctx.AttemptNumber)
 	} else {
-		fmt.Fprintf(&sb, "## RETRY: %s\n\n", ctx.Task.Title)
+		_, _ = fmt.Fprintf(&sb, "## RETRY: %s\n\n", ctx.Task.Title)
 	}
 
 	// Fix-only directive
@@ -87,7 +87,7 @@ func (b *Builder) BuildRetryPrompt(ctx RetryContext) (string, error) {
 
 	// Failure signature (for debugging context)
 	if ctx.FailureSignature != "" {
-		fmt.Fprintf(&sb, "Failure signature: `%s`\n\n", ctx.FailureSignature)
+		_, _ = fmt.Fprintf(&sb, "Failure signature: `%s`\n\n", ctx.FailureSignature)
 	}
 
 	// User feedback
@@ -106,7 +106,7 @@ func (b *Builder) BuildRetryPrompt(ctx RetryContext) (string, error) {
 	if len(ctx.Task.Acceptance) > 0 {
 		sb.WriteString("### Acceptance Criteria\n")
 		for _, a := range ctx.Task.Acceptance {
-			fmt.Fprintf(&sb, "- %s\n", a)
+			_, _ = fmt.Fprintf(&sb, "- %s\n", a)
 		}
 		sb.WriteString("\n")
 	}
@@ -116,7 +116,7 @@ func (b *Builder) BuildRetryPrompt(ctx RetryContext) (string, error) {
 		sb.WriteString("### Verification Commands\n")
 		sb.WriteString("Run these commands to verify your fix:\n")
 		for _, v := range ctx.Task.Verify {
-			fmt.Fprintf(&sb, "- `%s`\n", strings.Join(v, " "))
+			_, _ = fmt.Fprintf(&sb, "- `%s`\n", strings.Join(v, " "))
 		}
 		sb.WriteString("\n")
 	}
