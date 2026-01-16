@@ -305,7 +305,7 @@ tasks:
       - Task is ready if all dependsOn tasks are completed
       - Identify leaf tasks (no children)
       - Filter to: status=open AND ready=true AND isLeaf=true
-    status: open
+    status: completed
     acceptance:
       - "ComputeReady marks tasks with ready boolean"
       - "IsLeaf correctly identifies leaf tasks"

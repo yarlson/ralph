@@ -185,3 +185,23 @@
 - Return copies of slices from graph methods to prevent external mutation of internal state
 
 **Outcome**: Success - all 15 selector tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: selector-ready-computation (Ready Task Computation)
+
+**What changed:**
+- Implemented `ComputeReady(tasks, graph)` function that computes ready status for each task
+- A task is ready if all its dependencies (from dependsOn) are completed
+- Implemented `IsLeaf(tasks, taskID)` function to identify leaf tasks (tasks with no children)
+- Implemented `GetReadyLeaves(tasks, graph)` function that filters tasks by: status=open AND ready=true AND isLeaf=true
+
+**Files touched:**
+- `internal/selector/ready.go` (new)
+- `internal/selector/ready_test.go` (new)
+
+**Learnings:**
+- Build status lookup map first for O(1) dependency status checks
+- IsLeaf checks parentID references across all tasks - a task is a leaf if no other task has it as parentID
+- GetReadyLeaves applies three filters sequentially: open status, ready (all deps completed), and leaf (no children)
+- TDD approach: wrote 19 comprehensive tests covering no dependencies, completed/incomplete dependencies, transitive deps, leaf detection, and complex hierarchy scenarios
+
+**Outcome**: Success - all 34 selector tests pass, `go build ./...` and `go test ./...` succeed
