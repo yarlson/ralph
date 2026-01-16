@@ -59,3 +59,22 @@
 - Wrap stub errors with `fmt.Errorf("cmd: %w", errNotImplemented)` for consistent error messages
 
 **Outcome**: Success - all 12 tests pass, `go build ./...` and `go test ./cmd/...` succeed
+
+### 2026-01-16: project-setup-ralph-dir (.ralph Directory Structure)
+
+**What changed:**
+- Created `internal/state` package for directory structure management
+- Implemented `EnsureRalphDir(root)` function that creates the full `.ralph/` directory tree
+- Added path helper functions: `RalphDirPath`, `TasksDirPath`, `StateDirPath`, `LogsDirPath`, `ClaudeLogsDirPath`, `ArchiveDirPath`
+- Function is idempotent and creates directories with 0755 permissions
+
+**Files touched:**
+- `internal/state/state.go` (new)
+- `internal/state/state_test.go` (new)
+
+**Learnings:**
+- `os.MkdirAll` is naturally idempotent - it succeeds even if directories already exist
+- Checking root existence before creating subdirs gives clearer error messages
+- Use `t.TempDir()` for filesystem tests - it auto-cleans up
+
+**Outcome**: Success - all 6 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

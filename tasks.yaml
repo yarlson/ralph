@@ -126,7 +126,7 @@ tasks:
       - .ralph/logs/
       - .ralph/logs/claude/
       - .ralph/archive/
-    status: open
+    status: completed
     acceptance:
       - "EnsureRalphDir creates all directories if missing"
       - "Function is idempotent"
