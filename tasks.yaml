@@ -101,7 +101,7 @@ tasks:
       Create main.go and cmd/ package with Cobra root command.
       Add stub subcommands: init, run, status, pause, resume, retry, skip, report.
       Wire configuration loading into root command.
-    status: open
+    status: completed
     acceptance:
       - "main.go invokes cmd.Execute()"
       - "Root command with --config flag"
