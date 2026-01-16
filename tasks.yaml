@@ -11,7 +11,7 @@ tasks:
       Build a Go-based harness that orchestrates autonomous, iterative feature delivery
       by repeatedly selecting ready tasks, delegating to Claude Code, verifying outcomes,
       committing changes, and updating state.
-    status: open
+    status: completed
     acceptance:
       - "ralph run completes all ready leaf tasks under a parent task"
       - "Each completed task yields a verified git commit"
@@ -34,7 +34,7 @@ tasks:
     description: |
       Set up the Go project structure with Cobra CLI, configuration loading,
       and the .ralph directory layout.
-    status: open
+    status: completed
     acceptance:
       - "Go module initialized with proper dependencies"
       - "Cobra CLI skeleton with root command"
@@ -148,7 +148,7 @@ tasks:
     description: |
       Implement TaskStore interface and local file-based storage backend
       for task persistence under .ralph/tasks/.
-    status: open
+    status: completed
     acceptance:
       - "TaskStore interface defined"
       - "Local backend reads/writes tasks as JSON files"
@@ -263,7 +263,7 @@ tasks:
     description: |
       Implement task selection algorithm that finds the next ready leaf task
       respecting dependencies.
-    status: open
+    status: completed
     acceptance:
       - "Selector correctly identifies ready leaf tasks"
       - "Dependency graph is validated for cycles"
@@ -352,7 +352,7 @@ tasks:
     description: |
       Implement ClaudeRunner to execute Claude Code as subprocess,
       parse stream-json output, and extract results.
-    status: open
+    status: completed
     acceptance:
       - "ClaudeRunner interface defined"
       - "Subprocess execution with proper flags"
@@ -465,7 +465,7 @@ tasks:
     description: |
       Implement Verifier to run verification commands (typecheck, test, lint)
       and capture results.
-    status: open
+    status: completed
     acceptance:
       - "Verifier runs configured commands"
       - "Captures stdout/stderr"
@@ -551,7 +551,7 @@ tasks:
     description: |
       Implement GitManager for branch creation, commit after verification,
       and diff tracking.
-    status: open
+    status: completed
     acceptance:
       - "Creates feature branches"
       - "Commits only after verification passes"
@@ -638,7 +638,7 @@ tasks:
       - project-setup
     description: |
       Implement MemoryManager for progress.md updates and AGENTS.md management.
-    status: open
+    status: completed
     acceptance:
       - "Progress file updated per iteration"
       - "Archive old progress on new feature"
@@ -707,7 +707,7 @@ tasks:
     description: |
       Implement LoopController that orchestrates the main iteration loop,
       enforces budgets, and handles gutter detection.
-    status: open
+    status: completed
     acceptance:
       - "Loop runs select-execute-verify-commit cycle"
       - "Respects max iterations and time limits"
@@ -825,7 +825,7 @@ tasks:
       - loop-controller
     description: |
       Implement Reporter for status display and end-of-feature reports.
-    status: open
+    status: completed
     acceptance:
       - "Status shows task counts and next task"
       - "Report summarizes completed feature"
@@ -893,7 +893,7 @@ tasks:
       - reporter
     description: |
       Implement all CLI commands with proper wiring to core components.
-    status: open
+    status: completed
     acceptance:
       - "All commands functional"
       - "Proper error handling and output"
@@ -1043,7 +1043,7 @@ tasks:
       - verifier
     description: |
       Implement prompt packaging for Claude Code iterations.
-    status: open
+    status: completed
     acceptance:
       - "Iteration prompts include all required context"
       - "Context size limits enforced"
