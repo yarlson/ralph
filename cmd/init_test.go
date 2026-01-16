@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yarlson/go-ralph/internal/state"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // Helper to create a valid parent task (not a leaf)

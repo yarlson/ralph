@@ -1,7 +1,7 @@
 package selector
 
 import (
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // ComputeReady computes the ready status for each task in the list.

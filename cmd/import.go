@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/yarlson/go-ralph/internal/config"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 func newImportCmd() *cobra.Command {

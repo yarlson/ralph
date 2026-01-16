@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/yarlson/go-ralph/internal/config"
-	"github.com/yarlson/go-ralph/internal/memory"
-	"github.com/yarlson/go-ralph/internal/selector"
-	"github.com/yarlson/go-ralph/internal/state"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/selector"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 func newInitCmd() *cobra.Command {

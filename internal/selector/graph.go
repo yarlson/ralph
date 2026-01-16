@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // Graph represents a directed dependency graph of tasks.

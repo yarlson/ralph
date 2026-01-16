@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yarlson/go-ralph/internal/claude"
-	"github.com/yarlson/go-ralph/internal/git"
-	"github.com/yarlson/go-ralph/internal/memory"
-	"github.com/yarlson/go-ralph/internal/prompt"
-	"github.com/yarlson/go-ralph/internal/selector"
-	"github.com/yarlson/go-ralph/internal/state"
-	"github.com/yarlson/go-ralph/internal/taskstore"
-	"github.com/yarlson/go-ralph/internal/verifier"
+	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/git"
+	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/prompt"
+	"github.com/yarlson/ralph/internal/selector"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/verifier"
 )
 
 // RunLoopOutcome represents the final outcome of a loop run.
@@ -124,8 +124,8 @@ type Controller struct {
 	branchOverride         string         // optional branch name override
 
 	// Memory configuration
-	maxProgressBytes      int
-	maxRecentIterations   int
+	maxProgressBytes    int
+	maxRecentIterations int
 
 	// Sandbox mode configuration
 	sandboxEnabled bool

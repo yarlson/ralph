@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yarlson/go-ralph/internal/loop"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/loop"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 func TestNewRunCmd(t *testing.T) {

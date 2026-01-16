@@ -15,15 +15,15 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/yarlson/go-ralph/internal/claude"
-	"github.com/yarlson/go-ralph/internal/config"
-	gitpkg "github.com/yarlson/go-ralph/internal/git"
-	"github.com/yarlson/go-ralph/internal/loop"
-	"github.com/yarlson/go-ralph/internal/memory"
-	"github.com/yarlson/go-ralph/internal/selector"
-	"github.com/yarlson/go-ralph/internal/state"
-	"github.com/yarlson/go-ralph/internal/taskstore"
-	"github.com/yarlson/go-ralph/internal/verifier"
+	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/config"
+	gitpkg "github.com/yarlson/ralph/internal/git"
+	"github.com/yarlson/ralph/internal/loop"
+	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/selector"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/verifier"
 )
 
 func newRunCmd() *cobra.Command {

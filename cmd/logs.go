@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/yarlson/go-ralph/internal/loop"
-	"github.com/yarlson/go-ralph/internal/state"
+	"github.com/yarlson/ralph/internal/loop"
+	"github.com/yarlson/ralph/internal/state"
 )
 
 func newLogsCmd() *cobra.Command {

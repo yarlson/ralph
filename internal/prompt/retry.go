@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // RetryContext contains context needed to build a retry prompt after verification failure.

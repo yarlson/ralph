@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yarlson/go-ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/claude"
 )
 
 // systemPrompt is the Task Decomposer prompt that instructs Claude how to convert PRDs to tasks.

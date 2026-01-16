@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/yarlson/go-ralph/internal/claude"
-	"github.com/yarlson/go-ralph/internal/config"
-	"github.com/yarlson/go-ralph/internal/decomposer"
-	"github.com/yarlson/go-ralph/internal/state"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/decomposer"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 func newDecomposeCmd() *cobra.Command {

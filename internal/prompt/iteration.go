@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // IterationContext contains all the context needed to build an iteration prompt.

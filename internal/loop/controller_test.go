@@ -10,13 +10,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/yarlson/go-ralph/internal/claude"
-	"github.com/yarlson/go-ralph/internal/git"
-	"github.com/yarlson/go-ralph/internal/memory"
-	"github.com/yarlson/go-ralph/internal/selector"
-	"github.com/yarlson/go-ralph/internal/state"
-	"github.com/yarlson/go-ralph/internal/taskstore"
-	"github.com/yarlson/go-ralph/internal/verifier"
+	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/git"
+	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/selector"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/verifier"
 )
 
 // Ensure git package is used (for git.Manager interface)
@@ -1648,4 +1648,3 @@ func TestController_SetSandboxMode(t *testing.T) {
 		assert.False(t, ctrl.sandboxEnabled)
 	})
 }
-

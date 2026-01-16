@@ -3,7 +3,7 @@ package selector
 import (
 	"sort"
 
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // SelectNext selects the next ready leaf task from descendants of the given parent.

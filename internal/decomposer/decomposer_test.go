@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yarlson/go-ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/claude"
 )
 
 // mockRunner is a mock implementation of claude.Runner for testing

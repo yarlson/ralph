@@ -1,4 +1,4 @@
-module github.com/yarlson/go-ralph
+module github.com/yarlson/ralph
 
 go 1.25.5
 

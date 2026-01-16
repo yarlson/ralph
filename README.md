@@ -18,13 +18,13 @@ A Go-based harness that orchestrates [Claude Code](https://claude.ai) for autono
 ## Install
 
 ```bash
-go install github.com/yarlson/go-ralph@latest
+go install github.com/yarlson/ralph@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/yarlson/go-ralph.git
+git clone https://github.com/yarlson/ralph.git
 cd go-ralph
 go build ./...
 ```

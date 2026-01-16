@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yarlson/go-ralph/internal/git"
-	"github.com/yarlson/go-ralph/internal/loop"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/git"
+	"github.com/yarlson/ralph/internal/loop"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // CommitInfo contains information about a git commit produced during the feature.
@@ -250,7 +250,6 @@ func (g *ReportGenerator) getBlockedReason(task *taskstore.Task, taskByID map[st
 	}
 	return ""
 }
-
 
 // FormatReport formats a report for CLI display.
 func FormatReport(report *Report) string {

@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yarlson/go-ralph/internal/loop"
-	"github.com/yarlson/go-ralph/internal/state"
+	"github.com/yarlson/ralph/internal/loop"
+	"github.com/yarlson/ralph/internal/state"
 )
 
 func TestLogsCmd(t *testing.T) {
@@ -149,9 +149,9 @@ func TestLogsCmd_ShowSpecificIteration(t *testing.T) {
 		},
 		VerificationOutputs: []loop.VerificationOutput{
 			{
-				Command: []string{"go", "test", "./..."},
-				Passed:  true,
-				Output:  "ok",
+				Command:  []string{"go", "test", "./..."},
+				Passed:   true,
+				Output:   "ok",
 				Duration: 2 * time.Second,
 			},
 		},

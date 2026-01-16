@@ -23,7 +23,7 @@ func TestVerificationResult_AllFields(t *testing.T) {
 	result := VerificationResult{
 		Passed:   true,
 		Command:  []string{"go", "test", "./..."},
-		Output:   "ok  	github.com/yarlson/go-ralph/internal/verifier\n",
+		Output:   "ok  	github.com/yarlson/ralph/internal/verifier\n",
 		Duration: 5 * time.Second,
 	}
 

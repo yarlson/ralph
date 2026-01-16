@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yarlson/go-ralph/internal/loop"
-	"github.com/yarlson/go-ralph/internal/selector"
-	"github.com/yarlson/go-ralph/internal/taskstore"
+	"github.com/yarlson/ralph/internal/loop"
+	"github.com/yarlson/ralph/internal/selector"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 // TaskCounts holds the count of tasks in each status.
