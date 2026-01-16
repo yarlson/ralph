@@ -92,7 +92,7 @@ func TestNewReportGenerator(t *testing.T) {
 	store := &mockStore{tasks: []*taskstore.Task{}}
 	logsDir := "/tmp/logs"
 
-	gen := NewReportGenerator(store, logsDir)
+	gen := NewReportGenerator(store, logsDir, nil)
 
 	assert.NotNil(t, gen)
 }
@@ -100,7 +100,7 @@ func TestNewReportGenerator(t *testing.T) {
 func TestGenerateReportNoTasks(t *testing.T) {
 	store := &mockStore{tasks: []*taskstore.Task{}}
 
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestGenerateReportWithCompletedTasks(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestGenerateReportWithBlockedTasks(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestGenerateReportWithFailedTasks(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestGenerateReportWithSkippedTasks(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestGenerateReportWithIterationRecords(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, logsDir)
+	gen := NewReportGenerator(store, logsDir, nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -312,7 +312,7 @@ func TestGenerateReportCommitsFromRecords(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, logsDir)
+	gen := NewReportGenerator(store, logsDir, nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -368,7 +368,7 @@ func TestGenerateReportMixedStatuses(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func TestGenerateReportDeepHierarchy(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, "")
+	gen := NewReportGenerator(store, "", nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)
@@ -467,7 +467,7 @@ func TestGenerateReportTimeRange(t *testing.T) {
 	}
 
 	store := &mockStore{tasks: tasks}
-	gen := NewReportGenerator(store, logsDir)
+	gen := NewReportGenerator(store, logsDir, nil)
 
 	report, err := gen.GenerateReport("parent-1")
 	require.NoError(t, err)

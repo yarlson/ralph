@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yarlson/go-ralph/internal/config"
+	"github.com/yarlson/go-ralph/internal/git"
 	"github.com/yarlson/go-ralph/internal/reporter"
 	"github.com/yarlson/go-ralph/internal/state"
 	"github.com/yarlson/go-ralph/internal/taskstore"
@@ -70,8 +71,11 @@ func runReport(cmd *cobra.Command, outputFile string) error {
 	// Get logs directory
 	logsDir := state.LogsDirPath(workDir)
 
+	// Create git manager
+	gitManager := git.NewShellManager(workDir, cfg.Repo.BranchPrefix)
+
 	// Create report generator
-	generator := reporter.NewReportGenerator(store, logsDir)
+	generator := reporter.NewReportGenerator(store, logsDir, gitManager)
 
 	// Generate report
 	report, err := generator.GenerateReport(parentTaskID)

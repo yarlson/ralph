@@ -17,6 +17,7 @@ type mockManager struct {
 	diffStat      string
 	changedFiles  []string
 	commitHash    string
+	commitMessage string
 	err           error
 }
 
@@ -64,6 +65,13 @@ func (m *mockManager) GetCurrentBranch(_ context.Context) (string, error) {
 		return "", m.err
 	}
 	return m.currentBranch, nil
+}
+
+func (m *mockManager) GetCommitMessage(_ context.Context, _ string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return m.commitMessage, nil
 }
 
 func TestManagerInterface(t *testing.T) {

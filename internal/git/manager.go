@@ -75,4 +75,8 @@ type Manager interface {
 
 	// GetCurrentBranch returns the name of the current branch.
 	GetCurrentBranch(ctx context.Context) (string, error)
+
+	// GetCommitMessage returns the commit message for the given commit hash.
+	// It returns an error if the commit doesn't exist.
+	GetCommitMessage(ctx context.Context, hash string) (string, error)
 }

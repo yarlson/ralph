@@ -1,10 +1,12 @@
 package reporter
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/yarlson/go-ralph/internal/git"
 	"github.com/yarlson/go-ralph/internal/loop"
 	"github.com/yarlson/go-ralph/internal/taskstore"
 )
@@ -89,15 +91,17 @@ type Report struct {
 
 // ReportGenerator generates end-of-feature reports.
 type ReportGenerator struct {
-	taskStore taskstore.Store
-	logsDir   string
+	taskStore  taskstore.Store
+	logsDir    string
+	gitManager git.Manager
 }
 
 // NewReportGenerator creates a new report generator.
-func NewReportGenerator(store taskstore.Store, logsDir string) *ReportGenerator {
+func NewReportGenerator(store taskstore.Store, logsDir string, gitManager git.Manager) *ReportGenerator {
 	return &ReportGenerator{
-		taskStore: store,
-		logsDir:   logsDir,
+		taskStore:  store,
+		logsDir:    logsDir,
+		gitManager: gitManager,
 	}
 }
 
@@ -165,11 +169,23 @@ func (g *ReportGenerator) GenerateReport(parentTaskID string) (*Report, error) {
 
 				// Track commits from successful iterations
 				if record.ResultCommit != "" {
-					report.Commits = append(report.Commits, CommitInfo{
+					commitInfo := CommitInfo{
 						Hash:      record.ResultCommit,
 						TaskID:    record.TaskID,
 						Timestamp: record.EndTime,
-					})
+					}
+
+					// Fetch commit message if git manager is available
+					if g.gitManager != nil {
+						ctx := context.Background()
+						msg, err := g.gitManager.GetCommitMessage(ctx, record.ResultCommit)
+						if err == nil {
+							commitInfo.Message = msg
+						}
+						// If error, leave message empty (don't fail report generation)
+					}
+
+					report.Commits = append(report.Commits, commitInfo)
 				}
 
 				// Track time range

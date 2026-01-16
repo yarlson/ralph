@@ -386,7 +386,7 @@ tasks:
     description: |
       Add GetCommitMessage method to internal/git/manager.go.
       Modify internal/reporter/report.go to call it and populate CommitInfo.Message.
-    status: open
+    status: completed
     acceptance:
       - "Reports include commit messages"
       - "Messages formatted cleanly"

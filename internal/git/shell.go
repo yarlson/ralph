@@ -173,3 +173,9 @@ func (m *ShellManager) EnsureBranch(ctx context.Context, branchName string) erro
 	_, err = m.runGit(ctx, "checkout", "-b", fullBranchName)
 	return err
 }
+
+// GetCommitMessage returns the commit message for the given commit hash.
+// It uses the %B format to get the full commit message body.
+func (m *ShellManager) GetCommitMessage(ctx context.Context, hash string) (string, error) {
+	return m.runGit(ctx, "log", "-1", "--format=%B", hash)
+}

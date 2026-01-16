@@ -164,6 +164,7 @@ type mockGitManager struct {
 	diffStat      string
 	commitHash    string
 	currentBranch string
+	commitMessage string
 	err           error
 	commitCalls   []string
 }
@@ -213,6 +214,13 @@ func (m *mockGitManager) GetCurrentBranch(ctx context.Context) (string, error) {
 		return "", m.err
 	}
 	return m.currentBranch, nil
+}
+
+func (m *mockGitManager) GetCommitMessage(ctx context.Context, hash string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return m.commitMessage, nil
 }
 
 // Helper to create test tasks with required fields.
@@ -843,6 +851,10 @@ func (m *dynamicGitManager) Commit(ctx context.Context, message string) (string,
 
 func (m *dynamicGitManager) GetCurrentBranch(ctx context.Context) (string, error) {
 	return "main", nil
+}
+
+func (m *dynamicGitManager) GetCommitMessage(ctx context.Context, hash string) (string, error) {
+	return "commit message", nil
 }
 
 func indexOf(slice []string, item string) int {

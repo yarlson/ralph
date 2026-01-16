@@ -1682,3 +1682,36 @@
 - Claude metadata (model, session ID, cost, token counts) included when present
 
 **Outcome**: Success - all tests pass (go test ./...), task verification passes (go test ./internal/loop/...)
+
+### 2026-01-16: ralph-align-commit-messages (Include Commit Messages in Reports)
+
+**What changed:**
+
+- Added `GetCommitMessage(ctx, hash)` method to `git.Manager` interface in `internal/git/manager.go`
+- Implemented `GetCommitMessage` in `ShellManager` using `git log -1 --format=%B` to retrieve full commit message body
+- Modified `ReportGenerator` struct to accept `git.Manager` as a dependency
+- Updated `NewReportGenerator()` constructor signature to include `gitManager` parameter
+- Modified `GenerateReport()` to call `GetCommitMessage` for each commit and populate `CommitInfo.Message` field
+- Updated all mock implementations (`mockManager`, `mockGitManager`, `dynamicGitManager`) to implement the new method
+- Updated `cmd/report.go` to create `ShellManager` and pass it to `NewReportGenerator`
+- Updated all test files to pass `nil` for git manager where git operations are not being tested
+
+**Files touched:**
+
+- `internal/git/manager.go` (modified - added GetCommitMessage to interface)
+- `internal/git/shell.go` (modified - implemented GetCommitMessage method)
+- `internal/git/manager_test.go` (modified - added GetCommitMessage to mockManager)
+- `internal/reporter/report.go` (modified - added gitManager field, updated constructor, populate commit messages)
+- `internal/reporter/report_test.go` (modified - updated all NewReportGenerator calls to pass nil)
+- `cmd/report.go` (modified - create and pass git manager)
+- `internal/loop/controller_test.go` (modified - added GetCommitMessage to mockGitManager and dynamicGitManager)
+
+**Learnings:**
+
+- Git commit messages are retrieved using `git log -1 --format=%B <hash>` which returns the full message body
+- The reporter gracefully handles missing git manager (nil check) or commit retrieval errors by leaving message empty
+- This prevents report generation from failing if git operations fail
+- Mock implementations need to be updated whenever the interface changes to maintain test compatibility
+- Passing nil for optional dependencies in tests is idiomatic when those dependencies aren't being tested
+
+**Outcome**: Success - all tests pass (go test ./...), task verification passes (go test ./internal/git/..., go test ./internal/reporter/...)
