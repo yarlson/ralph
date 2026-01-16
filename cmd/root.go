@@ -49,17 +49,6 @@ func Execute() {
 var errNotImplemented = errors.New("not implemented")
 
 
-func newStatusCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Show current status",
-		Long:  "Display task counts, next selected task, and last iteration outcome.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("status: %w", errNotImplemented)
-		},
-	}
-}
-
 func newPauseCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "pause",

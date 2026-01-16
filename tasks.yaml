@@ -961,7 +961,7 @@ tasks:
       - Shows next selected task
       - Shows last iteration outcome
       - Shows log pointers
-    status: open
+    status: completed
     acceptance:
       - "Displays all status info"
       - "Handles no state gracefully"

@@ -53,7 +53,6 @@ func TestRootCommand(t *testing.T) {
 func TestSubcommands(t *testing.T) {
 	// Commands that are still stubs (not yet implemented)
 	stubCommands := []string{
-		"status",
 		"pause",
 		"resume",
 		"retry",

@@ -743,3 +743,28 @@
 - TDD approach: wrote 14 tests covering command structure, flags, error cases (no parent-task-id, nonexistent parent), and result formatting
 
 **Outcome**: Success - all 39 cmd tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: cli-status (ralph status Command)
+
+**What changed:**
+- Implemented `ralph status` command in `cmd/status.go`
+- Reads parent task ID from `.ralph/parent-task-id` file (requires `ralph init` first)
+- Uses `reporter.StatusGenerator` to gather status information
+- Displays task counts (total, completed, ready, blocked, failed, skipped)
+- Shows next selected task with ID and title
+- Shows last iteration info (ID, task, outcome, time, log path) if available
+- Outputs formatted status using `reporter.FormatStatus()`
+- Removed stub `newStatusCmd` from root.go, updated root_test.go to exclude `status` from stub commands
+
+**Files touched:**
+- `cmd/status.go` (new)
+- `cmd/status_test.go` (new)
+- `cmd/root.go` (removed stub newStatusCmd function)
+- `cmd/root_test.go` (removed "status" from stub commands list)
+
+**Learnings:**
+- Reuse existing `reporter.StatusGenerator` and `reporter.FormatStatus` for consistent status display
+- Follow same pattern as init/run commands: load config, read parent-task-id, validate parent task exists
+- TDD approach: wrote 12 tests covering command structure, error cases (no parent-task-id, nonexistent parent), various task count scenarios, next task display, last iteration info, and graceful handling of missing data
+
+**Outcome**: Success - all 51 cmd tests pass, `go build ./...` and `go test ./...` succeed
