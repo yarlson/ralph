@@ -296,3 +296,25 @@
 - TDD approach: wrote 20 tests covering argument building, log filename generation, working directory, environment variables, context cancellation, valid NDJSON parsing, error results, and permission denials
 
 **Outcome**: Success - all 49 claude tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: claude-runner-session-state (Session State Management)
+
+**What changed:**
+- Implemented `SessionState` struct in `internal/claude/session.go` with `PlannerSessionID`, `CoderSessionID`, and `UpdatedAt` fields
+- Created `SessionMode` type with constants `SessionModePlanner` and `SessionModeCoder` for tracking separate session contexts
+- Implemented `LoadSession(path)` function that loads session state from JSON file (returns empty state if file doesn't exist)
+- Implemented `SaveSession(path, state)` function that persists session state to JSON file (creates parent directories if needed)
+- Implemented `DetectSessionFork(currentID, newID)` function to detect when Claude returns a new session ID on --continue (fork detection)
+- Added helper methods: `UpdatePlannerSession()`, `UpdateCoderSession()`, `GetSessionForMode()`, `UpdateSessionForMode()`
+
+**Files touched:**
+- `internal/claude/session.go` (new)
+- `internal/claude/session_test.go` (new)
+
+**Learnings:**
+- Separate session IDs for planner vs coder allows different --continue contexts for different workflows
+- Fork detection is useful when Claude Code starts a new session instead of continuing (e.g., context too long)
+- Go's `errors.Is(err, os.ErrNotExist)` is the idiomatic way to check for file-not-found vs other read errors
+- Don't use `omitempty` on `time.Time` struct fields (linter warning: has no effect on nested structs)
+
+**Outcome**: Success - all 62 claude tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

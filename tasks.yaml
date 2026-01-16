@@ -443,7 +443,7 @@ tasks:
       - Support fresh sessions and --continue
       - Track planner_session_id and coder_session_id separately
       - Update timestamp on each invocation
-    status: open
+    status: completed
     acceptance:
       - "Session state persisted to JSON file"
       - "LoadSession and SaveSession functions"
