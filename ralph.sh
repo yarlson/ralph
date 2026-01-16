@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 read -r -d '' PROMPT <<'EOF' || true
 Read SPEC.md, tasks.yaml, and .ralph/progress.md.
@@ -194,5 +195,5 @@ while :; do
 	fi
 
 	gic -y
-	say "Task completed. Moving to the next one."
+	say "Task completed. Moving to the next one." &
 done

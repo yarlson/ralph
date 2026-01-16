@@ -1541,3 +1541,45 @@
 
 **Outcome**: Success - all tests pass (go test ./..., go build ./..., golangci-lint run), feature branch creation fully integrated, all acceptance criteria met
 
+
+### 2026-01-16: ralph-align-revert-cmd (Add ralph revert Command)
+
+**What changed:**
+
+- Created `cmd/revert.go` implementing the `ralph revert` command with:
+  - `--iteration` flag (required) to specify which iteration to revert
+  - `--force` flag to skip confirmation prompt
+  - Interactive confirmation prompt showing commit details and warnings
+  - Git reset --hard to the base commit from the iteration record
+  - Task status update to reset completed tasks back to open
+  - Error handling for missing iterations, missing base commits, and git failures
+- Created `cmd/revert_test.go` with comprehensive test coverage:
+  - Test for missing --iteration flag error
+  - Test for iteration not found error
+  - Test for confirmation requirement (flag structure validation)
+  - Full integration test with git repo setup, iteration records, and task status verification
+  - Helper functions: `runTestCommand()` and `getTestGitCommit()` for test git operations
+- Updated `cmd/root.go` to register the new `revertCmd` subcommand
+- Used `exec.Command()` directly for git reset operation to match existing patterns in the codebase
+
+**Files touched:**
+
+- `cmd/revert.go` (new - 162 lines)
+- `cmd/revert_test.go` (new - 148 lines)
+- `cmd/root.go` (added newRevertCmd() registration)
+- `tasks.yaml` (marked ralph-align-revert-cmd as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- Test helpers should follow existing patterns - use `exec.Command()` directly rather than creating wrapper functions
+- Task validation requires `CreatedAt` and `UpdatedAt` timestamps - all test tasks must include these fields
+- Git integration tests need proper setup: `git init -b main`, user config, commit.gpgsign=false, and initial commit
+- The `t.TempDir()` and `os.Chdir()` pattern requires saving and restoring the old working directory with defer
+- Confirmation prompts use `bufio.NewReader(cmd.InOrStdin())` to support testing with custom input streams
+- The `gitResetHard()` function wraps `exec.Command()` for better testability and separation of concerns
+- Task status updates only happen when the iteration outcome was success and the task exists in the store
+- The `--force` flag is essential for non-interactive use cases and testing
+- Error handling should distinguish between "task not found" (acceptable) and other errors (return)
+
+**Outcome**: Success - all tests pass (go test ./...), command fully functional with comprehensive error handling and user experience features (warnings, confirmations, clear messaging)

@@ -94,7 +94,7 @@ tasks:
       Create cmd/revert.go with --iteration flag to reset to before that iteration.
       Uses GitManager to git reset --hard and updates task status.
       Requires confirmation unless --force flag.
-    status: open
+    status: completed
     acceptance:
       - "ralph revert --iteration 5 resets to before iteration 5"
       - "Requires confirmation prompt"
