@@ -205,3 +205,23 @@
 - TDD approach: wrote 19 comprehensive tests covering no dependencies, completed/incomplete dependencies, transitive deps, leaf detection, and complex hierarchy scenarios
 
 **Outcome**: Success - all 34 selector tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: selector-select-next (Next Task Selection)
+
+**What changed:**
+- Implemented `SelectNext(tasks, graph, parentID, lastCompleted)` function in `internal/selector/selector.go`
+- Function gathers descendants of the parent task, computes ready leaves, and selects the next task
+- Selection heuristics: 1) prefer tasks with same "area" label as last completed task, 2) deterministic ordering by createdAt then ID
+- Added helper functions: `getDescendants()` (BFS traversal), `getReadyLeavesFromSubset()`, `sortTasksDeterministically()`, `getArea()`
+
+**Files touched:**
+- `internal/selector/selector.go` (new)
+- `internal/selector/selector_test.go` (new)
+
+**Learnings:**
+- Use BFS with parent-to-children map to efficiently gather all descendants of a parent task
+- Area preference heuristic: if multiple ready leaves exist and last completed task has an "area" label, prefer tasks with matching area
+- Deterministic ordering uses `sort.Slice` with two-level comparison: first by CreatedAt, then by ID for tie-breaking
+- TDD approach: wrote 17 comprehensive tests covering empty/single/multiple leaves, area preference, fallback ordering, deep hierarchies, and dependencies
+
+**Outcome**: Success - all 49 selector tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

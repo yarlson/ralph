@@ -329,7 +329,7 @@ tasks:
       - Selects next task using heuristics:
         1. Prefer same area as last completed
         2. Otherwise deterministic order (createdAt, then ID)
-    status: open
+    status: completed
     acceptance:
       - "Selector interface with SelectNext method"
       - "Returns next ready leaf or nil if none"
