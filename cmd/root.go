@@ -8,6 +8,11 @@ import (
 
 var cfgFile string
 
+// GetConfigFile returns the config file path from the flag
+func GetConfigFile() string {
+	return cfgFile
+}
+
 // NewRootCmd creates the root command for ralph CLI
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{

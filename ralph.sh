@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-set -x
 
 read -r -d '' PROMPT <<'EOF' || true
-Read PRD.md, tasks.yaml, and .ralph/progress.md.
+Read SPEC.md, tasks.yaml, and .ralph/progress.md.
 
 Pick exactly ONE task from tasks.yaml:
 - completed: false

@@ -1062,3 +1062,30 @@
 - The Ralph harness is designed to execute only leaf tasks, following PRD section 8.2
 
 **Outcome**: MVP Complete - all tests pass, all tasks completed
+
+### 2026-01-16: ralph-align-config-flag (Honor --config Flag)
+
+**What changed:**
+
+- Added `GetConfigFile()` function in `cmd/root.go` to expose the cfgFile flag to subcommands
+- Implemented `LoadConfigFromPath(configPath)` in `internal/config/config.go` to load config from a specific file path
+- Implemented `LoadConfigWithFile(workDir, configFile)` helper that uses configFile if provided, otherwise falls back to default LoadConfig
+- Updated all commands (init, run, status, pause, resume, retry, skip, report) to use `config.LoadConfigWithFile(workDir, GetConfigFile())`
+- `LoadConfigFromPath` checks if file exists first and returns defaults if not found (handles missing files gracefully)
+- Added comprehensive tests for `LoadConfigFromPath` and `LoadConfigWithFile` covering valid files, non-existent files, invalid YAML, and fallback behavior
+
+**Files touched:**
+
+- `cmd/root.go` (added GetConfigFile function)
+- `internal/config/config.go` (added LoadConfigFromPath and LoadConfigWithFile functions, added os import)
+- `cmd/init.go`, `cmd/run.go`, `cmd/status.go`, `cmd/report.go`, `cmd/retry.go`, `cmd/skip.go` (updated to use LoadConfigWithFile)
+- `internal/config/config_test.go` (added 6 new tests)
+
+**Learnings:**
+
+- When using `viper.SetConfigFile(path)`, must check file existence first with `os.Stat()` because Viper returns an error for missing files (unlike `viper.AddConfigPath()` which gracefully handles missing files)
+- Using an empty string for configFile parameter triggers the fallback to default behavior - clean pattern for optional config file override
+- The `GetConfigFile()` helper makes the cfgFile accessible to all subcommands without needing to pass it through context or global mutable state
+- All config loading now goes through `LoadConfigWithFile` which centralizes the logic and ensures consistent behavior across all commands
+
+**Outcome**: Success - all tests pass (11 config tests including 6 new ones), go build succeeds, acceptance criteria met

@@ -1,1099 +1,542 @@
-# Ralph Harness Implementation Tasks
-# Format follows PRD section 8.1 Task Model
-
 tasks:
-  # =============================================================================
-  # ROOT TASK
-  # =============================================================================
-  - id: ralph-mvp
-    title: "Ralph Wiggum Loop Harness MVP"
+  - id: ralph-align-mvp
+    title: "Ralph PRD Alignment and Completion"
     description: |
-      Build a Go-based harness that orchestrates autonomous, iterative feature delivery
-      by repeatedly selecting ready tasks, delegating to Claude Code, verifying outcomes,
-      committing changes, and updating state.
-    status: completed
+      Align the current Ralph harness implementation with PRD.md by addressing
+      all discrepancies documented in PRD_DISCREPANCIES.md. Implement missing
+      features, fix broken functionality, and ensure full PRD compliance.
+    status: open
     acceptance:
-      - "ralph run completes all ready leaf tasks under a parent task"
-      - "Each completed task yields a verified git commit"
-      - "Verification commands pass on each completion"
-      - "Progress log contains per-iteration entries"
-      - "Final report lists commits, completed tasks, and blocked tasks with reasons"
+      - "All commands in PRD section 10 are implemented and functional"
+      - "All config options in PRD section 10 are honored"
+      - "Task status transitions match PRD section 8.1"
+      - "Prompts include all context from PRD section 12"
+      - "Memory hygiene follows PRD section 8.7"
+      - "Git discipline follows PRD section 8.6"
+      - "Verification follows PRD section 8.5"
+      - "All items in PRD_DISCREPANCIES.md are resolved"
     verify:
       - ["go", "build", "./..."]
       - ["go", "test", "./..."]
       - ["golangci-lint", "run"]
     labels:
       area: root
+      priority: P0
 
-  # =============================================================================
-  # CORE INFRASTRUCTURE
-  # =============================================================================
-  - id: project-setup
-    title: "Project Structure and Configuration"
-    parentId: ralph-mvp
-    description: |
-      Set up the Go project structure with Cobra CLI, configuration loading,
-      and the .ralph directory layout.
-    status: completed
-    acceptance:
-      - "Go module initialized with proper dependencies"
-      - "Cobra CLI skeleton with root command"
-      - "Configuration loading from ralph.yaml"
-      - ".ralph/ directory structure created on init"
-    verify:
-      - ["go", "build", "./..."]
-      - ["go", "test", "./..."]
+  - id: ralph-align-cli-config
+    title: "CLI and Configuration Foundation"
+    parentId: ralph-align-mvp
+    description: "Fix configuration loading and basic CLI functionality"
+    status: open
     labels:
-      area: infra
+      area: cli
+      priority: P0
+      specSection: "Phase 1"
 
-  - id: project-setup-module
-    title: "Initialize Go Module"
-    parentId: project-setup
+  - id: ralph-align-config-flag
+    title: "Honor --config Flag"
+    parentId: ralph-align-cli-config
     description: |
-      Create go.mod with module name and add core dependencies:
-      - github.com/spf13/cobra (CLI)
-      - github.com/spf13/viper (config)
-      - gopkg.in/yaml.v3 (YAML parsing)
-      - github.com/stretchr/testify (testing)
-    status: completed
-    dependsOn: []
-    acceptance:
-      - "go.mod exists with module github.com/yarlson/go-ralph"
-      - "All dependencies added and go.sum generated"
-      - "go build ./... succeeds"
-    verify:
-      - ["go", "build", "./..."]
-    labels:
-      area: infra
-
-  - id: project-setup-config
-    title: "Configuration Loading"
-    parentId: project-setup
-    dependsOn:
-      - project-setup-module
-    description: |
-      Implement configuration loading from ralph.yaml with defaults.
-      Create internal/config package with Config struct matching ralph.yaml schema:
-      - repo (root, branch_prefix)
-      - tasks (backend, path, parent_id_file)
-      - memory (progress_file, archive_dir)
-      - claude (command, args)
-      - verification (commands)
-      - loop (max_iterations, max_minutes_per_iteration, gutter settings)
-      - safety (sandbox, allowed_commands)
+      Modify cmd/root.go to store cfgFile and pass to LoadConfig.
+      Update all command files to respect the config path from root command.
     status: completed
     acceptance:
-      - "Config struct with all fields from PRD ralph.yaml example"
-      - "LoadConfig function reads ralph.yaml from repo root"
-      - "Sensible defaults when config file missing"
-      - "Unit tests for config loading"
+      - "ralph --config path/to/ralph.yaml run uses specified config file"
+      - "Default behavior unchanged when flag omitted"
+      - "Error message shown if specified config file doesn't exist"
     verify:
+      - ["go", "test", "./cmd/..."]
       - ["go", "test", "./internal/config/..."]
     labels:
-      area: infra
+      area: cli
+      priority: P0
 
-  - id: project-setup-cli-skeleton
-    title: "Cobra CLI Skeleton"
-    parentId: project-setup
-    dependsOn:
-      - project-setup-config
+  - id: ralph-align-claude-args
+    title: "Honor claude.command and claude.args"
+    parentId: ralph-align-cli-config
     description: |
-      Create main.go and cmd/ package with Cobra root command.
-      Add stub subcommands: init, run, status, pause, resume, retry, skip, report.
-      Wire configuration loading into root command.
-    status: completed
+      Build full command array from config.Claude.Command + config.Claude.Args
+      in cmd/run.go and internal/claude/exec.go.
+    status: open
     acceptance:
-      - "main.go invokes cmd.Execute()"
-      - "Root command with --config flag"
-      - "Stub subcommands return 'not implemented' for now"
-      - "ralph --help shows all commands"
+      - "Config command and args both used in Claude invocation"
+      - "Empty args handled correctly"
+      - "Unit test verifies command construction"
     verify:
-      - ["go", "build", "./..."]
+      - ["go", "test", "./internal/claude/..."]
+    labels:
+      area: cli
+      priority: P1
+
+  - id: ralph-align-logs-cmd
+    title: "Add ralph logs Command"
+    parentId: ralph-align-cli-config
+    description: |
+      Create cmd/logs.go with --iteration flag to show specific iteration log.
+      List available iterations if no flag provided.
+      Read from .ralph/logs/iteration-<n>.json and pretty-print.
+    status: open
+    acceptance:
+      - "ralph logs lists all iterations"
+      - "ralph logs --iteration 5 shows iteration 5 details"
+      - "Clear error if iteration doesn't exist"
+      - "JSON formatted for readability"
+    verify:
       - ["go", "test", "./cmd/..."]
     labels:
       area: cli
+      priority: P1
 
-  - id: project-setup-ralph-dir
-    title: ".ralph Directory Structure"
-    parentId: project-setup
-    dependsOn:
-      - project-setup-config
+  - id: ralph-align-revert-cmd
+    title: "Add ralph revert Command"
+    parentId: ralph-align-cli-config
     description: |
-      Implement EnsureRalphDir function in internal/state package.
-      Creates directory structure:
-      - .ralph/tasks/
-      - .ralph/state/
-      - .ralph/logs/
-      - .ralph/logs/claude/
-      - .ralph/archive/
-    status: completed
+      Create cmd/revert.go with --iteration flag to reset to before that iteration.
+      Uses GitManager to git reset --hard and updates task status.
+      Requires confirmation unless --force flag.
+    status: open
     acceptance:
-      - "EnsureRalphDir creates all directories if missing"
-      - "Function is idempotent"
-      - "Directories have correct permissions"
-      - "Unit tests verify directory creation"
+      - "ralph revert --iteration 5 resets to before iteration 5"
+      - "Requires confirmation prompt"
+      - "Updates task status correctly"
+      - "Error if iteration doesn't exist or git fails"
     verify:
-      - ["go", "test", "./internal/state/..."]
+      - ["go", "test", "./cmd/..."]
     labels:
-      area: infra
+      area: cli
+      priority: P2
 
-  # =============================================================================
-  # TASK STORE
-  # =============================================================================
-  - id: task-store
-    title: "Local Task Store"
-    parentId: ralph-mvp
-    dependsOn:
-      - project-setup
+  - id: ralph-align-pause-check
+    title: "Fix ralph pause Checking"
+    parentId: ralph-align-cli-config
     description: |
-      Implement TaskStore interface and local file-based storage backend
-      for task persistence under .ralph/tasks/.
-    status: completed
+      Modify internal/loop/controller.go to check pause flag in main loop
+      before selecting next task, not just at start of run.
+    status: open
     acceptance:
-      - "TaskStore interface defined"
-      - "Local backend reads/writes tasks as JSON files"
-      - "CRUD operations work correctly"
-      - "Concurrent access is safe"
+      - "Running ralph pause in another terminal stops loop after current iteration"
+      - "Status message shows paused state"
+      - "ralph resume allows loop to continue"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+    labels:
+      area: core
+      priority: P1
+
+  - id: ralph-align-task-storage
+    title: "Task Storage and Status Management"
+    parentId: ralph-align-mvp
+    description: "Fix task status transitions and enable YAML import"
+    status: open
+    labels:
+      area: core
+      priority: P0
+      specSection: "Phase 2"
+
+  - id: ralph-align-task-status
+    title: "Implement Task Status Transitions"
+    parentId: ralph-align-task-storage
+    description: |
+      Modify internal/loop/controller.go to set failed status when max retries
+      exceeded and blocked status on gutter detection.
+      Track attempt count in iteration state or task metadata.
+    status: open
+    acceptance:
+      - "Tasks failing max retries are marked failed"
+      - "Tasks hitting gutter detection are marked blocked"
+      - "ralph status shows accurate failed/blocked counts"
+      - "Blocked/failed tasks skip selection until manually reset"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+      - ["go", "test", "./internal/taskstore/..."]
+    labels:
+      area: core
+      priority: P0
+
+  - id: ralph-align-yaml-import
+    title: "Add YAML Import CLI Command"
+    parentId: ralph-align-task-storage
+    description: |
+      Create cmd/import.go to read YAML file and call taskstore.ImportFromYAML.
+      Validates all tasks before importing.
+      Add --overwrite flag to replace existing tasks.
+    status: open
+    acceptance:
+      - "ralph import tasks.yaml loads tasks into store"
+      - "Validation errors show task IDs and reasons"
+      - "Existing tasks not overwritten unless --overwrite"
+      - "Import is atomic (all or nothing)"
+    verify:
+      - ["go", "test", "./cmd/..."]
+    labels:
+      area: cli
+      priority: P1
+
+  - id: ralph-align-task-linter
+    title: "Implement Task Linter"
+    parentId: ralph-align-task-storage
+    dependsOn:
+      - ralph-align-yaml-import
+    description: |
+      Create internal/taskstore/linter.go to validate tasks.
+      Call linter in ralph init and ralph import.
+    status: open
+    acceptance:
+      - "Init fails if tasks are invalid"
+      - "Import fails if tasks are invalid"
+      - "Clear error messages identify specific problems"
+      - "Unit tests for each validation rule"
     verify:
       - ["go", "test", "./internal/taskstore/..."]
     labels:
       area: core
+      priority: P1
 
-  - id: task-store-model
-    title: "Task Model Definition"
-    parentId: task-store
-    dependsOn: []
-    description: |
-      Define Task struct in internal/taskstore/model.go with fields:
-      - ID, Title, Description (string)
-      - ParentID (optional string pointer)
-      - DependsOn ([]string)
-      - Status (enum: open, in_progress, completed, blocked, failed, skipped)
-      - Acceptance ([]string)
-      - Verify ([][]string - command arrays)
-      - Labels (map[string]string)
-      - CreatedAt, UpdatedAt (time.Time)
-
-      Include JSON tags and validation methods.
-    status: completed
-    acceptance:
-      - "Task struct with all required fields"
-      - "TaskStatus type with valid values"
-      - "Validate() method checks required fields"
-      - "JSON serialization/deserialization works"
-    verify:
-      - ["go", "test", "./internal/taskstore/..."]
+  - id: ralph-align-prompts
+    title: "Prompt Engineering and Context Packaging"
+    parentId: ralph-align-mvp
+    description: "Use the full prompt builder with all required context"
+    status: open
     labels:
       area: core
+      priority: P0
+      specSection: "Phase 3"
 
-  - id: task-store-interface
-    title: "TaskStore Interface"
-    parentId: task-store
-    dependsOn:
-      - task-store-model
+  - id: ralph-align-iteration-prompt
+    title: "Integrate Iteration Prompt Builder"
+    parentId: ralph-align-prompts
     description: |
-      Define TaskStore interface in internal/taskstore/store.go:
-      - Get(id string) (*Task, error)
-      - List() ([]*Task, error)
-      - ListByParent(parentID string) ([]*Task, error)
-      - Save(task *Task) error
-      - UpdateStatus(id string, status TaskStatus) error
-      - Delete(id string) error
-    status: completed
+      Replace minimal prompt in internal/loop/controller.go with
+      prompt.BuildIterationPrompt. Include system prompt, task details,
+      acceptance, verify commands, Codebase Patterns, git diff stat.
+      Enforce size limits (default 100KB).
+    status: open
     acceptance:
-      - "Interface defined with all methods"
-      - "Error types for NotFound, ValidationError"
-      - "Interface is consumer-defined (Go idiom)"
+      - "Generated prompts include all PRD-specified context"
+      - "Size limits enforced; context trimmed if needed"
+      - "System prompt follows PRD template"
+      - "Unit tests verify all sections present"
     verify:
-      - ["go", "build", "./internal/taskstore/..."]
-    labels:
-      area: core
-
-  - id: task-store-local
-    title: "Local File Store Implementation"
-    parentId: task-store
-    dependsOn:
-      - task-store-interface
-    description: |
-      Implement LocalTaskStore in internal/taskstore/local.go:
-      - Stores each task as .ralph/tasks/{id}.json
-      - Uses file locking for concurrent access safety
-      - Atomic writes (write to temp, rename)
-      - Loads all tasks on List() by scanning directory
-    status: completed
-    acceptance:
-      - "LocalTaskStore implements TaskStore interface"
-      - "Tasks persisted as individual JSON files"
-      - "Atomic writes prevent corruption"
-      - "File locking prevents race conditions"
-      - "Unit tests with temp directories"
-    verify:
-      - ["go", "test", "./internal/taskstore/..."]
-    labels:
-      area: core
-
-  - id: task-store-yaml-import
-    title: "YAML Task Import"
-    parentId: task-store
-    dependsOn:
-      - task-store-local
-    description: |
-      Implement ImportFromYAML function to load tasks from a YAML file
-      (like this tasks.yaml) into the local task store.
-      Support bulk import for initial task seeding.
-    status: completed
-    acceptance:
-      - "ImportFromYAML reads YAML task definitions"
-      - "Validates all tasks before importing"
-      - "Reports import errors with task IDs"
-      - "Unit tests with sample YAML fixtures"
-    verify:
-      - ["go", "test", "./internal/taskstore/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # SELECTOR
-  # =============================================================================
-  - id: selector
-    title: "Ready Task Selector"
-    parentId: ralph-mvp
-    dependsOn:
-      - task-store
-    description: |
-      Implement task selection algorithm that finds the next ready leaf task
-      respecting dependencies.
-    status: completed
-    acceptance:
-      - "Selector correctly identifies ready leaf tasks"
-      - "Dependency graph is validated for cycles"
-      - "Selection is deterministic"
-    verify:
-      - ["go", "test", "./internal/selector/..."]
-    labels:
-      area: core
-
-  - id: selector-dependency-graph
-    title: "Dependency Graph Builder"
-    parentId: selector
-    dependsOn: []
-    description: |
-      Implement BuildDependencyGraph in internal/selector/graph.go:
-      - Takes list of tasks
-      - Builds directed graph from dependsOn relationships
-      - Detects cycles using topological sort
-      - Returns error with cycle path if found
-    status: completed
-    acceptance:
-      - "Graph struct with nodes and edges"
-      - "BuildGraph constructs from task list"
-      - "DetectCycles returns cycle path or nil"
-      - "Unit tests for valid and cyclic graphs"
-    verify:
-      - ["go", "test", "./internal/selector/..."]
-    labels:
-      area: core
-
-  - id: selector-ready-computation
-    title: "Ready Task Computation"
-    parentId: selector
-    dependsOn:
-      - selector-dependency-graph
-    description: |
-      Implement ComputeReady in internal/selector/ready.go:
-      - Given task list and graph, compute ready status for each task
-      - Task is ready if all dependsOn tasks are completed
-      - Identify leaf tasks (no children)
-      - Filter to: status=open AND ready=true AND isLeaf=true
-    status: completed
-    acceptance:
-      - "ComputeReady marks tasks with ready boolean"
-      - "IsLeaf correctly identifies leaf tasks"
-      - "GetReadyLeaves returns filtered list"
-      - "Unit tests with various dependency scenarios"
-    verify:
-      - ["go", "test", "./internal/selector/..."]
-    labels:
-      area: core
-
-  - id: selector-select-next
-    title: "Next Task Selection"
-    parentId: selector
-    dependsOn:
-      - selector-ready-computation
-    description: |
-      Implement SelectNext in internal/selector/selector.go:
-      - Takes parent task ID and task store
-      - Gathers descendants of parent
-      - Computes ready leaves
-      - Selects next task using heuristics:
-        1. Prefer same area as last completed
-        2. Otherwise deterministic order (createdAt, then ID)
-    status: completed
-    acceptance:
-      - "Selector interface with SelectNext method"
-      - "Returns next ready leaf or nil if none"
-      - "Area preference heuristic works"
-      - "Deterministic fallback ordering"
-      - "Unit tests for selection scenarios"
-    verify:
-      - ["go", "test", "./internal/selector/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # CLAUDE RUNNER
-  # =============================================================================
-  - id: claude-runner
-    title: "Claude Code Subprocess Runner"
-    parentId: ralph-mvp
-    dependsOn:
-      - project-setup
-    description: |
-      Implement ClaudeRunner to execute Claude Code as subprocess,
-      parse stream-json output, and extract results.
-    status: completed
-    acceptance:
-      - "ClaudeRunner interface defined"
-      - "Subprocess execution with proper flags"
-      - "NDJSON parsing extracts session_id, result, usage"
-      - "Raw logs saved to .ralph/logs/claude/"
-    verify:
-      - ["go", "test", "./internal/claude/..."]
-    labels:
-      area: core
-
-  - id: claude-runner-interface
-    title: "ClaudeRunner Interface"
-    parentId: claude-runner
-    dependsOn: []
-    description: |
-      Define ClaudeRunner interface and request/response types in internal/claude/runner.go:
-      - ClaudeRequest: Cwd, SystemPrompt, AllowedTools, Prompt, Continue, ExtraArgs, Env
-      - ClaudeResponse: SessionID, Model, Version, FinalText, StreamText, Usage, TotalCostUSD, PermissionDenials, RawEventsPath
-      - ClaudeRunner.Run(ctx, req) -> (*ClaudeResponse, error)
-    status: completed
-    acceptance:
-      - "Interface and types defined per CLAUDE-CODE.md spec"
-      - "Types have JSON tags for logging"
-      - "Context support for cancellation"
-    verify:
-      - ["go", "build", "./internal/claude/..."]
-    labels:
-      area: core
-
-  - id: claude-runner-ndjson-parser
-    title: "NDJSON Stream Parser"
-    parentId: claude-runner
-    dependsOn:
-      - claude-runner-interface
-    description: |
-      Implement NDJSON parser in internal/claude/parser.go:
-      - Parse line-by-line from io.Reader
-      - Handle event types: system/init, assistant/message, result/success, result/error
-      - Extract session_id from init
-      - Accumulate text from assistant/message
-      - Extract final result, usage, cost from result event
-      - Handle large lines (configure scanner buffer)
-      - Continue on parse errors, fail only if no terminal result
-    status: completed
-    acceptance:
-      - "Parser handles all event types from CLAUDE-CODE.md"
-      - "Large line handling (10MB buffer)"
-      - "Graceful degradation on parse errors"
-      - "Unit tests with captured NDJSON fixtures"
-    verify:
-      - ["go", "test", "./internal/claude/..."]
-    labels:
-      area: core
-
-  - id: claude-runner-subprocess
-    title: "Subprocess Execution"
-    parentId: claude-runner
-    dependsOn:
-      - claude-runner-ndjson-parser
-    description: |
-      Implement subprocess execution in internal/claude/exec.go:
-      - Build command with flags: --output-format=stream-json, --system-prompt, --allowedTools, -p, --continue
-      - Set working directory and environment
-      - Stream stdout to parser and log file simultaneously
-      - Capture stderr separately
-      - Handle context cancellation (kill process)
-      - Save raw NDJSON to .ralph/logs/claude/{timestamp}-{task}.ndjson
-    status: completed
-    acceptance:
-      - "Command built with correct flags"
-      - "Stdout streamed to parser and file"
-      - "Context cancellation kills subprocess"
-      - "Raw logs preserved for debugging"
-      - "Integration test with mock claude binary"
-    verify:
-      - ["go", "test", "./internal/claude/..."]
-    labels:
-      area: core
-
-  - id: claude-runner-session-state
-    title: "Session State Management"
-    parentId: claude-runner
-    dependsOn:
-      - claude-runner-subprocess
-    description: |
-      Implement session state persistence in internal/claude/session.go:
-      - Store session IDs in .ralph/state/claude-session.json
-      - Support fresh sessions and --continue
-      - Track planner_session_id and coder_session_id separately
-      - Update timestamp on each invocation
-    status: completed
-    acceptance:
-      - "Session state persisted to JSON file"
-      - "LoadSession and SaveSession functions"
-      - "Session fork detection (new ID on continue)"
-      - "Unit tests for state management"
-    verify:
-      - ["go", "test", "./internal/claude/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # VERIFIER
-  # =============================================================================
-  - id: verifier
-    title: "Verification Pipeline"
-    parentId: ralph-mvp
-    dependsOn:
-      - project-setup
-    description: |
-      Implement Verifier to run verification commands (typecheck, test, lint)
-      and capture results.
-    status: completed
-    acceptance:
-      - "Verifier runs configured commands"
-      - "Captures stdout/stderr"
-      - "Returns pass/fail with output"
-      - "Supports command allowlist"
-    verify:
-      - ["go", "test", "./internal/verifier/..."]
-    labels:
-      area: core
-
-  - id: verifier-interface
-    title: "Verifier Interface"
-    parentId: verifier
-    dependsOn: []
-    description: |
-      Define Verifier interface in internal/verifier/verifier.go:
-      - VerificationResult: Passed bool, Command []string, Output string, Duration time.Duration
-      - Verifier.Verify(ctx, commands [][]string) ([]VerificationResult, error)
-      - Verifier.VerifyTask(ctx, task *Task) ([]VerificationResult, error)
-    status: completed
-    acceptance:
-      - "Interface defined with result types"
-      - "Context support for timeout"
-      - "Clear separation of concerns"
-    verify:
-      - ["go", "build", "./internal/verifier/..."]
-    labels:
-      area: core
-
-  - id: verifier-command-runner
-    title: "Command Runner"
-    parentId: verifier
-    dependsOn:
-      - verifier-interface
-    description: |
-      Implement command execution in internal/verifier/runner.go:
-      - Run each command as subprocess
-      - Capture combined stdout/stderr
-      - Respect context timeout
-      - Check against command allowlist (safety)
-      - Return structured result with timing
-    status: completed
-    acceptance:
-      - "Commands executed sequentially"
-      - "Output captured with size limits"
-      - "Allowlist enforced if configured"
-      - "Timeout kills process"
-      - "Unit tests with test commands"
-    verify:
-      - ["go", "test", "./internal/verifier/..."]
-    labels:
-      area: core
-
-  - id: verifier-output-trimmer
-    title: "Output Trimmer for Feedback"
-    parentId: verifier
-    dependsOn:
-      - verifier-command-runner
-    description: |
-      Implement TrimOutput in internal/verifier/trimmer.go:
-      - Trim verification output to configurable max lines/bytes
-      - Preserve most relevant parts (end of output typically has errors)
-      - Format for inclusion in next Claude prompt
-    status: completed
-    acceptance:
-      - "TrimOutput respects max lines/bytes"
-      - "Preserves tail of output"
-      - "Adds truncation marker if trimmed"
-      - "Unit tests for various output sizes"
-    verify:
-      - ["go", "test", "./internal/verifier/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # GIT MANAGER
-  # =============================================================================
-  - id: git-manager
-    title: "Git Branch and Commit Manager"
-    parentId: ralph-mvp
-    dependsOn:
-      - project-setup
-    description: |
-      Implement GitManager for branch creation, commit after verification,
-      and diff tracking.
-    status: completed
-    acceptance:
-      - "Creates feature branches"
-      - "Commits only after verification passes"
-      - "Proper commit message formatting"
-      - "Tracks base and result commits"
-    verify:
-      - ["go", "test", "./internal/git/..."]
-    labels:
-      area: core
-
-  - id: git-manager-interface
-    title: "GitManager Interface"
-    parentId: git-manager
-    dependsOn: []
-    description: |
-      Define GitManager interface in internal/git/manager.go:
-      - EnsureBranch(branchName string) error
-      - GetCurrentCommit() (string, error)
-      - HasChanges() (bool, error)
-      - GetDiffStat() (string, error)
-      - GetChangedFiles() ([]string, error)
-      - Commit(message string) (string, error)
-      - GetCurrentBranch() (string, error)
-    status: completed
-    acceptance:
-      - "Interface covers all required git operations"
-      - "Clear error types for common failures"
-    verify:
-      - ["go", "build", "./internal/git/..."]
-    labels:
-      area: core
-
-  - id: git-manager-shell
-    title: "Git Shell Implementation"
-    parentId: git-manager
-    dependsOn:
-      - git-manager-interface
-    description: |
-      Implement ShellGitManager in internal/git/shell.go:
-      - Shell out to git binary (MVP approach)
-      - Parse git output for status, diff, commit hash
-      - Handle git errors gracefully
-      - Support configured branch prefix (ralph/)
-    status: completed
-    acceptance:
-      - "All interface methods implemented"
-      - "Correct git command invocation"
-      - "Output parsing works reliably"
-      - "Integration tests with temp git repo"
-    verify:
-      - ["go", "test", "./internal/git/..."]
-    labels:
-      area: core
-
-  - id: git-manager-commit-template
-    title: "Commit Message Templates"
-    parentId: git-manager
-    dependsOn:
-      - git-manager-shell
-    description: |
-      Implement commit message formatting in internal/git/commit.go:
-      - Support templates: feat:, fix:, chore:
-      - Include task title in message
-      - Add iteration metadata in commit body
-      - FormatCommitMessage(task *Task, iterationID string) string
-    status: completed
-    acceptance:
-      - "Commit messages follow conventional format"
-      - "Task title included"
-      - "Iteration ID in body"
-      - "Unit tests for message formatting"
-    verify:
-      - ["go", "test", "./internal/git/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # MEMORY MANAGER
-  # =============================================================================
-  - id: memory-manager
-    title: "Progress and Memory Management"
-    parentId: ralph-mvp
-    dependsOn:
-      - project-setup
-    description: |
-      Implement MemoryManager for progress.md updates and AGENTS.md management.
-    status: completed
-    acceptance:
-      - "Progress file updated per iteration"
-      - "Archive old progress on new feature"
-      - "Codebase Patterns section maintained"
-    verify:
-      - ["go", "test", "./internal/memory/..."]
-    labels:
-      area: core
-
-  - id: memory-manager-progress
-    title: "Progress File Management"
-    parentId: memory-manager
-    dependsOn: []
-    description: |
-      Implement progress file handling in internal/memory/progress.go:
-      - Create .ralph/progress.md with header on init
-      - AppendIteration adds per-iteration entry
-      - GetCodebasePatterns extracts patterns section
-      - EnforceMaxSize prunes old entries to stay under cap
-    status: completed
-    acceptance:
-      - "Progress file created with proper header"
-      - "Iterations appended in consistent format"
-      - "Patterns section extractable"
-      - "Size limit enforced"
-      - "Unit tests for all operations"
-    verify:
-      - ["go", "test", "./internal/memory/..."]
-    labels:
-      area: core
-
-  - id: memory-manager-archive
-    title: "Progress Archive"
-    parentId: memory-manager
-    dependsOn:
-      - memory-manager-progress
-    description: |
-      Implement progress archiving in internal/memory/archive.go:
-      - ArchiveProgress moves current progress.md to .ralph/archive/
-      - Names archived files with timestamp
-      - Called when starting new feature
-    status: completed
-    acceptance:
-      - "Archive function moves file correctly"
-      - "Timestamp in archived filename"
-      - "New progress.md created after archive"
-      - "Unit tests verify archiving"
-    verify:
-      - ["go", "test", "./internal/memory/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # LOOP CONTROLLER
-  # =============================================================================
-  - id: loop-controller
-    title: "Iteration Loop Controller"
-    parentId: ralph-mvp
-    dependsOn:
-      - task-store
-      - selector
-      - claude-runner
-      - verifier
-      - git-manager
-      - memory-manager
-    description: |
-      Implement LoopController that orchestrates the main iteration loop,
-      enforces budgets, and handles gutter detection.
-    status: completed
-    acceptance:
-      - "Loop runs select-execute-verify-commit cycle"
-      - "Respects max iterations and time limits"
-      - "Gutter detection stops runaway loops"
-      - "Iteration records created"
-    verify:
+      - ["go", "test", "./internal/prompt/..."]
       - ["go", "test", "./internal/loop/..."]
     labels:
       area: core
+      priority: P0
 
-  - id: loop-controller-iteration-record
-    title: "Iteration Record Model"
-    parentId: loop-controller
-    dependsOn: []
+  - id: ralph-align-retry-prompt
+    title: "Integrate Retry Prompt Builder"
+    parentId: ralph-align-prompts
     description: |
-      Define IterationRecord in internal/loop/record.go:
-      - IterationID, TaskID
-      - StartTime, EndTime
-      - ClaudeInvocation metadata
-      - BaseCommit, ResultCommit
-      - VerificationOutputs
-      - FilesChanged
-      - Outcome (success, failed, budget_exceeded, blocked)
-      - Feedback (for next attempt)
-    status: completed
+      Call prompt.BuildRetryPrompt on verification failure in
+      internal/loop/controller.go. Include trimmed failure output,
+      fix-only directive, and user feedback if provided.
+    status: open
     acceptance:
-      - "IterationRecord struct with all fields"
-      - "JSON serialization for logging"
-      - "SaveRecord writes to .ralph/logs/"
-      - "Unit tests for serialization"
-    verify:
-      - ["go", "test", "./internal/loop/..."]
-    labels:
-      area: core
-
-  - id: loop-controller-budget
-    title: "Budget Tracking"
-    parentId: loop-controller
-    dependsOn:
-      - loop-controller-iteration-record
-    description: |
-      Implement budget tracking in internal/loop/budget.go:
-      - Track iterations, time, cost
-      - Load/save from .ralph/state/budget.json
-      - CheckBudget returns whether to continue
-      - UpdateBudget adds iteration costs
-    status: completed
-    acceptance:
-      - "Budget state persisted"
-      - "All limits checked (iterations, time, cost)"
-      - "Clear signal when budget exceeded"
-      - "Unit tests for budget logic"
-    verify:
-      - ["go", "test", "./internal/loop/..."]
-    labels:
-      area: core
-
-  - id: loop-controller-gutter
-    title: "Gutter Detection"
-    parentId: loop-controller
-    dependsOn:
-      - loop-controller-iteration-record
-    description: |
-      Implement gutter detection in internal/loop/gutter.go:
-      - Track failure signatures (verification output hashes)
-      - Detect repeated same failure (configurable threshold)
-      - Detect file churn (same files modified repeatedly without progress)
-      - Return GutterStatus with reason
-    status: completed
-    acceptance:
-      - "Repeated failure detection works"
-      - "File churn detection works"
-      - "Configurable thresholds"
-      - "Unit tests for detection logic"
-    verify:
-      - ["go", "test", "./internal/loop/..."]
-    labels:
-      area: core
-
-  - id: loop-controller-orchestrator
-    title: "Main Loop Orchestrator"
-    parentId: loop-controller
-    dependsOn:
-      - loop-controller-budget
-      - loop-controller-gutter
-    description: |
-      Implement main loop in internal/loop/controller.go:
-      - RunLoop(ctx, parentTaskID) executes iterations
-      - Each iteration: select task, invoke Claude, verify, commit or record failure
-      - Update task status after completion
-      - Update progress.md
-      - Check budgets and gutter after each iteration
-      - Return summary of run
-    status: completed
-    acceptance:
-      - "Full iteration cycle implemented"
-      - "Task status updated correctly"
-      - "Progress updated"
-      - "Budgets enforced"
-      - "Gutter detection triggers pause"
-      - "Integration test with mocked components"
-    verify:
-      - ["go", "test", "./internal/loop/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # REPORTER
-  # =============================================================================
-  - id: reporter
-    title: "Status and Report Generation"
-    parentId: ralph-mvp
-    dependsOn:
-      - task-store
-      - loop-controller
-    description: |
-      Implement Reporter for status display and end-of-feature reports.
-    status: completed
-    acceptance:
-      - "Status shows task counts and next task"
-      - "Report summarizes completed feature"
-      - "Logs accessible via CLI"
-    verify:
-      - ["go", "test", "./internal/reporter/..."]
-    labels:
-      area: core
-
-  - id: reporter-status
-    title: "Status Generation"
-    parentId: reporter
-    dependsOn: []
-    description: |
-      Implement status generation in internal/reporter/status.go:
-      - GetStatus returns TaskCounts (completed, ready, blocked, failed)
-      - Includes next selected task
-      - Includes last iteration outcome
-      - Format for CLI display
-    status: completed
-    acceptance:
-      - "Accurate task counts"
-      - "Next task identified"
-      - "Last iteration info included"
-      - "Unit tests for status"
-    verify:
-      - ["go", "test", "./internal/reporter/..."]
-    labels:
-      area: core
-
-  - id: reporter-report
-    title: "Feature Report Generation"
-    parentId: reporter
-    dependsOn:
-      - reporter-status
-    description: |
-      Implement report generation in internal/reporter/report.go:
-      - GenerateReport creates end-of-feature summary
-      - Lists all commits
-      - Lists completed tasks
-      - Lists blocked tasks with reasons
-      - Includes time and cost totals
-    status: completed
-    acceptance:
-      - "Report includes all commits"
-      - "Task breakdown by status"
-      - "Blocked tasks have reasons"
-      - "Totals calculated"
-      - "Unit tests for report generation"
-    verify:
-      - ["go", "test", "./internal/reporter/..."]
-    labels:
-      area: core
-
-  # =============================================================================
-  # CLI COMMANDS
-  # =============================================================================
-  - id: cli-commands
-    title: "CLI Command Implementation"
-    parentId: ralph-mvp
-    dependsOn:
-      - task-store
-      - selector
-      - loop-controller
-      - reporter
-    description: |
-      Implement all CLI commands with proper wiring to core components.
-    status: completed
-    acceptance:
-      - "All commands functional"
-      - "Proper error handling and output"
-      - "Help text accurate"
-    verify:
-      - ["go", "build", "./..."]
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  - id: cli-init
-    title: "ralph init Command"
-    parentId: cli-commands
-    dependsOn: []
-    description: |
-      Implement init command in cmd/init.go:
-      - --parent <id> sets parent task ID
-      - --search <term> finds parent by title search
-      - Creates .ralph/ directory structure
-      - Writes .ralph/parent-task-id
-      - Validates task graph (acyclic, has ready leaves)
-    status: completed
-    acceptance:
-      - "Creates .ralph/ structure"
-      - "Parent task ID persisted"
-      - "Graph validation runs"
-      - "Clear error messages"
-    verify:
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  - id: cli-run
-    title: "ralph run Command"
-    parentId: cli-commands
-    dependsOn:
-      - cli-init
-    description: |
-      Implement run command in cmd/run.go:
-      - Default: runs loop until done or blocked
-      - --once: single iteration
-      - --max-iterations N: override config limit
-      - Loads parent task ID
-      - Invokes LoopController
-      - Displays progress
-    status: completed
-    acceptance:
-      - "Loop execution works"
-      - "--once flag works"
-      - "--max-iterations works"
-      - "Progress displayed"
-      - "Graceful shutdown on interrupt"
-    verify:
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  - id: cli-status
-    title: "ralph status Command"
-    parentId: cli-commands
-    dependsOn: []
-    description: |
-      Implement status command in cmd/status.go:
-      - Shows task counts (completed/ready/blocked/failed)
-      - Shows next selected task
-      - Shows last iteration outcome
-      - Shows log pointers
-    status: completed
-    acceptance:
-      - "Displays all status info"
-      - "Handles no state gracefully"
-      - "Clear formatting"
-    verify:
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  - id: cli-pause-resume
-    title: "ralph pause/resume Commands"
-    parentId: cli-commands
-    dependsOn: []
-    description: |
-      Implement pause and resume commands in cmd/pause.go and cmd/resume.go:
-      - pause: writes .ralph/state/paused flag
-      - resume: removes paused flag
-      - run command checks paused state
-    status: completed
-    acceptance:
-      - "Pause sets flag"
-      - "Resume clears flag"
-      - "Run respects pause state"
-      - "Clear status messages"
-    verify:
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  - id: cli-retry-skip
-    title: "ralph retry/skip Commands"
-    parentId: cli-commands
-    dependsOn: []
-    description: |
-      Implement retry and skip commands in cmd/retry.go and cmd/skip.go:
-      - retry --task <id>: resets task to open, adds feedback
-      - skip --task <id>: marks task as skipped
-      - Both validate task exists and is in appropriate state
-    status: completed
-    acceptance:
-      - "Retry resets task status"
-      - "Skip marks as skipped"
-      - "Validates task state"
-      - "Feedback captured for retry"
-    verify:
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  - id: cli-report
-    title: "ralph report Command"
-    parentId: cli-commands
-    dependsOn:
-      - reporter-report
-    description: |
-      Implement report command in cmd/report.go:
-      - Generates and displays feature report
-      - Optional --output <file> to write report
-      - Formats for terminal or file output
-    status: completed
-    acceptance:
-      - "Report displayed correctly"
-      - "--output writes to file"
-      - "Handles missing data gracefully"
-    verify:
-      - ["go", "test", "./cmd/..."]
-    labels:
-      area: cli
-
-  # =============================================================================
-  # PROMPT PACKAGER
-  # =============================================================================
-  - id: prompt-packager
-    title: "Claude Prompt Packager"
-    parentId: ralph-mvp
-    dependsOn:
-      - claude-runner
-      - memory-manager
-      - verifier
-    description: |
-      Implement prompt packaging for Claude Code iterations.
-    status: completed
-    acceptance:
-      - "Iteration prompts include all required context"
-      - "Context size limits enforced"
-      - "Retry prompts include failure feedback"
+      - "Retry prompts include trimmed failure output"
+      - "Fix-only directive present and clear"
+      - "User feedback appended when provided"
+      - "Trimming respects max lines config (default 100 lines)"
     verify:
       - ["go", "test", "./internal/prompt/..."]
     labels:
       area: core
+      priority: P0
 
-  - id: prompt-packager-iteration
-    title: "Iteration Prompt Builder"
-    parentId: prompt-packager
-    dependsOn: []
+  - id: ralph-align-codebase-patterns
+    title: "Extract and Use Codebase Patterns"
+    parentId: ralph-align-prompts
     description: |
-      Implement iteration prompt building in internal/prompt/iteration.go:
-      - Include task description and acceptance criteria
-      - Include verify commands
-      - Include Codebase Patterns from progress.md
-      - Include git diff stat and changed files
-      - Enforce size limits
-      - Build system prompt with harness instructions
-    status: completed
+      Implement GetCodebasePatterns in internal/memory/progress.go to
+      extract Codebase Patterns section. Include in prompt builder.
+    status: open
     acceptance:
-      - "All required context included"
-      - "Size limits enforced"
-      - "Clean separation of system/user prompt"
-      - "Unit tests for prompt building"
+      - "GetCodebasePatterns extracts patterns section"
+      - "Patterns included in every Claude iteration prompt"
+      - "Empty patterns section handled gracefully"
+      - "Unit tests for extraction"
     verify:
-      - ["go", "test", "./internal/prompt/..."]
+      - ["go", "test", "./internal/memory/..."]
     labels:
       area: core
+      priority: P1
 
-  - id: prompt-packager-retry
-    title: "Retry Prompt Builder"
-    parentId: prompt-packager
+  - id: ralph-align-verification
+    title: "Verification and In-Iteration Retry"
+    parentId: ralph-align-mvp
     dependsOn:
-      - prompt-packager-iteration
+      - ralph-align-prompts
+    description: "Enable config-level verification commands and in-iteration fix loop"
+    status: open
+    labels:
+      area: core
+      priority: P0
+      specSection: "Phase 4"
+
+  - id: ralph-align-config-verify
+    title: "Use Config-Level Verification Commands"
+    parentId: ralph-align-verification
     description: |
-      Implement retry prompt building in internal/prompt/retry.go:
-      - Include trimmed verification failure output
-      - Add "fix-only" directive
-      - Include failure signature for context
-      - Append user feedback if provided
-    status: completed
+      Merge config-level and task-level verify commands in
+      internal/loop/controller.go. Run both sets of commands.
+    status: open
     acceptance:
-      - "Failure output included and trimmed"
-      - "Fix-only directive present"
-      - "User feedback appended"
-      - "Unit tests for retry prompts"
+      - "Both config and task verification commands execute"
+      - "All must pass for iteration to succeed"
+      - "Clear output showing which command failed"
+      - "Config commands optional if not specified"
     verify:
+      - ["go", "test", "./internal/loop/..."]
+    labels:
+      area: core
+      priority: P1
+
+  - id: ralph-align-retry-loop
+    title: "Implement In-Iteration Retry Loop"
+    parentId: ralph-align-verification
+    dependsOn:
+      - ralph-align-retry-prompt
+    description: |
+      After Claude run, if verification fails, build retry prompt and
+      invoke Claude again with --continue. Repeat up to max_verification_retries.
+      Add loop.max_verification_retries to config (default 2).
+    status: open
+    acceptance:
+      - "Claude gets chances to fix verification failures"
+      - "Retry prompts are fix-only focused"
+      - "Max retries configurable"
+      - "Attempt count tracked in iteration record"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+      - ["go", "test", "./internal/config/..."]
+    labels:
+      area: core
+      priority: P0
+
+  - id: ralph-align-iteration-timeout
+    title: "Enforce Per-Iteration Time Limit"
+    parentId: ralph-align-verification
+    description: |
+      Create context with timeout in internal/loop/controller.go.
+      Pass to Claude runner. Cancel if timeout exceeded.
+      Update budget tracking.
+    status: open
+    acceptance:
+      - "Claude subprocess killed if iteration exceeds time limit"
+      - "Iteration marked as budget_exceeded"
+      - "Budget JSON tracks iteration durations"
+      - "Config default: 20 minutes"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+      - ["go", "test", "./internal/loop/budget.go"]
+    labels:
+      area: core
+      priority: P1
+
+  - id: ralph-align-git-reporting
+    title: "Git Discipline and Reporting"
+    parentId: ralph-align-mvp
+    description: "Create feature branches and improve reporting"
+    status: open
+    labels:
+      area: core
+      priority: P1
+      specSection: "Phase 5"
+
+  - id: ralph-align-feature-branch
+    title: "Create and Use Feature Branches"
+    parentId: ralph-align-git-reporting
+    description: |
+      Call gitManager.EnsureBranch at start of run in internal/loop/controller.go.
+      Generate branch name from parent task: ralph/<parent-task-title-slug>.
+      Update ralph init to suggest branch creation.
+    status: open
+    acceptance:
+      - "ralph run creates/switches to feature branch"
+      - "Branch name format: ralph/<feature-name>"
+      - "Existing branches reused"
+      - "User can override with --branch flag"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+      - ["go", "test", "./internal/git/..."]
+    labels:
+      area: core
+      priority: P1
+
+  - id: ralph-align-text-logs
+    title: "Generate Human-Readable Iteration Logs"
+    parentId: ralph-align-git-reporting
+    description: |
+      Modify internal/loop/record.go to generate text summary after saving JSON.
+      Write to .ralph/logs/iteration-<n>.txt with task, times, outcome, files, commit.
+    status: open
+    acceptance:
+      - "Both .json and .txt logs created per iteration"
+      - "Text log is human-readable"
+      - "Text log includes key metrics"
+      - "ralph logs can show text version"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+    labels:
+      area: core
+      priority: P2
+
+  - id: ralph-align-commit-messages
+    title: "Include Commit Messages in Reports"
+    parentId: ralph-align-git-reporting
+    description: |
+      Add GetCommitMessage method to internal/git/manager.go.
+      Modify internal/reporter/report.go to call it and populate CommitInfo.Message.
+    status: open
+    acceptance:
+      - "Reports include commit messages"
+      - "Messages formatted cleanly"
+      - "Errors handled if commit missing"
+    verify:
+      - ["go", "test", "./internal/git/..."]
+      - ["go", "test", "./internal/reporter/..."]
+    labels:
+      area: core
+      priority: P2
+
+  - id: ralph-align-memory
+    title: "Memory Hygiene and Long-Term State"
+    parentId: ralph-align-mvp
+    description: "Archive progress, enforce size limits, manage AGENTS.md"
+    status: open
+    labels:
+      area: core
+      priority: P1
+      specSection: "Phase 6"
+
+  - id: ralph-align-archive-progress
+    title: "Archive Old Progress on Feature Switch"
+    parentId: ralph-align-memory
+    description: |
+      Modify cmd/init.go to call memoryManager.ArchiveProgress when setting
+      new parent task different from previous.
+      Store previous parent ID in state to detect changes.
+    status: open
+    acceptance:
+      - "Old progress moved to .ralph/archive/progress-TIMESTAMP.md"
+      - "New progress.md created with header"
+      - "Feature name and parent ID in header"
+      - "Archive only happens on parent task change"
+    verify:
+      - ["go", "test", "./cmd/..."]
+      - ["go", "test", "./internal/memory/..."]
+    labels:
+      area: core
+      priority: P2
+
+  - id: ralph-align-progress-limits
+    title: "Enforce Progress File Size Limits"
+    parentId: ralph-align-memory
+    description: |
+      After appending iteration in internal/memory/progress.go, check file size.
+      If exceeds config limit (default 1MB), prune oldest entries while preserving
+      header, Codebase Patterns, and recent N iterations (default 20).
+      Add memory.max_progress_bytes to config.
+    status: open
+    acceptance:
+      - "Progress file stays under size limit"
+      - "Header and patterns never pruned"
+      - "Recent iterations preserved"
+      - "Pruning note added when triggered"
+    verify:
+      - ["go", "test", "./internal/memory/..."]
+      - ["go", "test", "./internal/config/..."]
+    labels:
+      area: core
+      priority: P2
+
+  - id: ralph-align-agents-md
+    title: "Support AGENTS.md Updates"
+    parentId: ralph-align-memory
+    description: |
+      Create internal/memory/agents.go with FindAgentsMd and ReadAgentsMd.
+      Modify internal/prompt/iteration.go to include AGENTS.md guidance
+      and existing AGENTS.md content in prompts.
+    status: open
+    acceptance:
+      - "System prompt includes AGENTS.md guidance"
+      - "Existing AGENTS.md files read and included in context"
+      - "No automatic creation; Claude decides when to add"
+      - "Unit tests for file discovery"
+    verify:
+      - ["go", "test", "./internal/memory/..."]
       - ["go", "test", "./internal/prompt/..."]
     labels:
       area: core
+      priority: P2
+
+  - id: ralph-align-safety
+    title: "Safety and Robustness"
+    parentId: ralph-align-mvp
+    description: "Enable sandbox mode, command allowlists, better gutter detection"
+    status: open
+    labels:
+      area: core
+      priority: P1
+      specSection: "Phase 7"
+
+  - id: ralph-align-sandbox
+    title: "Implement Sandbox Mode Guard"
+    parentId: ralph-align-safety
+    description: |
+      Modify internal/claude/exec.go and internal/verifier/runner.go to check
+      commands against allowlist when config.Safety.Sandbox is true.
+      Use Claude Code's --allowedTools flag to restrict tools.
+    status: open
+    acceptance:
+      - "Sandbox mode blocks disallowed commands"
+      - "Clear error message when blocked"
+      - "Allowlist configurable in ralph.yaml"
+      - "Default allowlist: npm, go, git"
+    verify:
+      - ["go", "test", "./internal/claude/..."]
+      - ["go", "test", "./internal/verifier/..."]
+    labels:
+      area: security
+      priority: P1
+
+  - id: ralph-align-gutter
+    title: "Improve Gutter Detection"
+    parentId: ralph-align-safety
+    description: |
+      Enhance internal/loop/gutter.go to detect oscillation (files modified
+      back and forth using content hash), no-progress commits, and failure
+      signatures across iterations. Add gutter config options.
+    status: open
+    acceptance:
+      - "Oscillation detected when file changes revert"
+      - "Content hash prevents false positives"
+      - "All thresholds configurable"
+      - "Unit tests for each detection type"
+    verify:
+      - ["go", "test", "./internal/loop/..."]
+      - ["go", "test", "./internal/config/..."]
+    labels:
+      area: core
+      priority: P1
+
+  - id: ralph-align-retry-feedback
+    title: "Add Retry Feedback Support"
+    parentId: ralph-align-safety
+    dependsOn:
+      - ralph-align-task-status
+    description: |
+      Add --feedback flag to cmd/retry.go to store user feedback.
+      Modify internal/loop/controller.go to read feedback and pass to retry prompt.
+      Create .ralph/state/retry-feedback.json state file.
+    status: open
+    acceptance:
+      - "ralph retry --task X --feedback 'message' stores feedback"
+      - "Next iteration includes feedback in retry prompt"
+      - "Feedback cleared after successful iteration"
+      - "Feedback shown in status command"
+    verify:
+      - ["go", "test", "./cmd/..."]
+      - ["go", "test", "./internal/loop/..."]
+    labels:
+      area: core
+      priority: P2

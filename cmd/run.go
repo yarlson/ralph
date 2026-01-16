@@ -53,7 +53,7 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 	}
 
 	// Load configuration
-	cfg, err := config.LoadConfig(workDir)
+	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

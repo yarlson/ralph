@@ -165,3 +165,108 @@ func TestConfig_RepoRoot(t *testing.T) {
 	}
 	assert.Equal(t, ".", cfg.Repo.Root)
 }
+
+func TestLoadConfigFromPath_WithValidFile(t *testing.T) {
+	// Create a temp directory with a custom config file
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "custom-config.yaml")
+
+	configContent := `
+loop:
+  max_iterations: 75
+safety:
+  sandbox: true
+  allowed_commands: ["npm", "go"]
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	cfg, err := LoadConfigFromPath(configPath)
+	require.NoError(t, err)
+
+	// Check overridden values
+	assert.Equal(t, 75, cfg.Loop.MaxIterations)
+	assert.True(t, cfg.Safety.Sandbox)
+	assert.Equal(t, []string{"npm", "go"}, cfg.Safety.AllowedCommands)
+
+	// Check defaults are still present
+	assert.Equal(t, ".", cfg.Repo.Root)
+	assert.Equal(t, "local", cfg.Tasks.Backend)
+}
+
+func TestLoadConfigFromPath_NonExistentFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.yaml")
+
+	// Should succeed with defaults since file not found is handled
+	cfg, err := LoadConfigFromPath(configPath)
+	require.NoError(t, err)
+
+	// Should have default values
+	assert.Equal(t, 50, cfg.Loop.MaxIterations)
+	assert.False(t, cfg.Safety.Sandbox)
+}
+
+func TestLoadConfigFromPath_InvalidYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "invalid.yaml")
+
+	invalidContent := `
+loop:
+  max_iterations: [invalid
+`
+	err := os.WriteFile(configPath, []byte(invalidContent), 0644)
+	require.NoError(t, err)
+
+	_, err = LoadConfigFromPath(configPath)
+	assert.Error(t, err)
+}
+
+func TestLoadConfigWithFile_WithConfigFile(t *testing.T) {
+	// Create a temp directory with a custom config file
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "my-config.yaml")
+
+	configContent := `
+loop:
+  max_iterations: 30
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	// Should use the config file
+	cfg, err := LoadConfigWithFile(tmpDir, configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, 30, cfg.Loop.MaxIterations)
+}
+
+func TestLoadConfigWithFile_WithEmptyConfigFile(t *testing.T) {
+	// Create a temp directory with a ralph.yaml
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ralph.yaml")
+
+	configContent := `
+loop:
+  max_iterations: 25
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	// Should fall back to LoadConfig (uses ralph.yaml in workDir)
+	cfg, err := LoadConfigWithFile(tmpDir, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, 25, cfg.Loop.MaxIterations)
+}
+
+func TestLoadConfigWithFile_FallbackToDefault(t *testing.T) {
+	// Create a temp directory without any config file
+	tmpDir := t.TempDir()
+
+	// Should use defaults
+	cfg, err := LoadConfigWithFile(tmpDir, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, 50, cfg.Loop.MaxIterations)
+}

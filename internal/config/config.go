@@ -1,7 +1,7 @@
 package config
 
 import (
-	"path/filepath"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -66,6 +66,15 @@ type SafetyConfig struct {
 	AllowedCommands []string `mapstructure:"allowed_commands"`
 }
 
+// LoadConfigWithFile loads configuration from a specific file if provided,
+// otherwise falls back to LoadConfig with the working directory.
+func LoadConfigWithFile(workDir, configFile string) (*Config, error) {
+	if configFile != "" {
+		return LoadConfigFromPath(configFile)
+	}
+	return LoadConfig(workDir)
+}
+
 // LoadConfig loads configuration from ralph.yaml in the given directory.
 // If no config file exists, sensible defaults are returned.
 func LoadConfig(dir string) (*Config, error) {
@@ -97,8 +106,39 @@ func LoadConfig(dir string) (*Config, error) {
 
 // LoadConfigFromPath loads configuration from a specific file path
 func LoadConfigFromPath(configPath string) (*Config, error) {
-	dir := filepath.Dir(configPath)
-	return LoadConfig(dir)
+	v := viper.New()
+
+	// Set defaults
+	setDefaults(v)
+
+	// Check if file exists
+	if _, err := os.Stat(configPath); err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, return defaults
+			cfg := &Config{}
+			if err := v.Unmarshal(cfg); err != nil {
+				return nil, err
+			}
+			return cfg, nil
+		}
+		return nil, err
+	}
+
+	// Configure viper to read from specific file
+	v.SetConfigFile(configPath)
+
+	// Read config file
+	if err := v.ReadInConfig(); err != nil {
+		return nil, err
+	}
+
+	// Unmarshal into Config struct
+	cfg := &Config{}
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
 }
 
 // setDefaults sets all default values for configuration
