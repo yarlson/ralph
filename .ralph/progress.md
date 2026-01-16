@@ -513,3 +513,27 @@
 - TDD approach: wrote 17 tests first covering archive creation, timestamp in filename, directory creation, error handling, multiple archives, and listing
 
 **Outcome**: Success - all 35 memory tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: loop-controller-iteration-record (Iteration Record Model)
+
+**What changed:**
+- Created `internal/loop` package for iteration orchestration
+- Implemented `IterationRecord` struct with all required fields: IterationID, TaskID, StartTime, EndTime, ClaudeInvocation, BaseCommit, ResultCommit, VerificationOutputs, FilesChanged, Outcome, Feedback
+- Implemented `IterationOutcome` type with values: success, failed, budget_exceeded, blocked
+- Implemented `ClaudeInvocationMeta` struct for Claude Code invocation metadata (Command, Model, SessionID, TotalCostUSD, InputTokens, OutputTokens)
+- Implemented `VerificationOutput` struct mirroring verifier package results
+- Added helper functions: `NewIterationRecord(taskID)`, `GenerateIterationID()`, `SaveRecord(dir, record)`, `LoadRecord(path)`
+- Added methods: `Duration()`, `Complete(outcome)`, `SetFeedback(feedback)`, `AllPassed()`
+- Full JSON serialization support for logging and persistence
+
+**Files touched:**
+- `internal/loop/record.go` (new)
+- `internal/loop/record_test.go` (new)
+- `go.mod` / `go.sum` (added github.com/google/uuid dependency)
+
+**Learnings:**
+- Use `github.com/google/uuid` for generating unique IDs; slice first 8 characters for readable iteration IDs
+- `SaveRecord` creates directory if not exists using `os.MkdirAll`
+- TDD approach: wrote 26 tests first covering outcome validity, record defaults, all fields, JSON serialization, duration calculation, completion, feedback, save/load functionality, and verification pass aggregation
+
+**Outcome**: Success - all 26 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

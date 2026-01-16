@@ -732,7 +732,7 @@ tasks:
       - FilesChanged
       - Outcome (success, failed, budget_exceeded, blocked)
       - Feedback (for next attempt)
-    status: open
+    status: completed
     acceptance:
       - "IterationRecord struct with all fields"
       - "JSON serialization for logging"
