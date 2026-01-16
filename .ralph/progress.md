@@ -628,3 +628,31 @@
 - TDD approach: wrote 20 tests first covering outcome validity, constructor, loop scenarios (no tasks, success, verification failure, budget exceeded, context cancellation, Claude error, no changes, multiple tasks), run once, summary, dependency graph ordering
 
 **Outcome**: Success - all 95 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: reporter-status (Status Generation)
+
+**What changed:**
+- Created `internal/reporter` package for status display and report generation
+- Implemented `TaskCounts` struct for aggregating task counts (total, completed, ready, blocked, failed, skipped)
+- Implemented `LastIterationInfo` struct for summarizing last iteration (iterationID, taskID, taskTitle, outcome, endTime, logPath)
+- Implemented `Status` struct combining parent task ID, counts, next task, and last iteration info
+- Implemented `StatusGenerator` struct with `NewStatusGenerator(store, logsDir)` constructor
+- Implemented `GetStatus(parentTaskID)` method that:
+  - Gathers all descendant tasks under parent via BFS traversal
+  - Counts tasks by status (completed, blocked, failed, skipped)
+  - Uses selector to count ready leaves and find next task
+  - Loads last iteration record from logs directory
+- Implemented `FindLatestIterationRecord(logsDir)` that scans iteration JSON files and returns the most recent by end time
+- Implemented `FormatStatus(status)` for CLI display with markdown-formatted output
+
+**Files touched:**
+- `internal/reporter/status.go` (new)
+- `internal/reporter/status_test.go` (new)
+
+**Learnings:**
+- Reuse selector package's `GetReadyLeaves` and `SelectNext` for consistent ready task logic
+- Parse iteration log files from `.ralph/logs/` directory to find latest iteration by comparing EndTime
+- BFS traversal with parent-to-children map efficiently gathers all descendants
+- TDD approach: wrote 22 tests first covering struct defaults, all fields, generator creation, various task scenarios (no tasks, blocked, skipped, dependencies, deep hierarchy), last iteration loading (single/multiple files), and formatting
+
+**Outcome**: Success - all 22 reporter tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

@@ -845,7 +845,7 @@ tasks:
       - Includes next selected task
       - Includes last iteration outcome
       - Format for CLI display
-    status: open
+    status: completed
     acceptance:
       - "Accurate task counts"
       - "Next task identified"

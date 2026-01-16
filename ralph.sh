@@ -55,7 +55,6 @@ else
 fi
 
 banner() {
-	# Usage: banner COLOR "TITLE" ["DETAIL..."]
 	local color="$1"
 	shift
 	local title="$1"
@@ -71,7 +70,6 @@ banner() {
 }
 
 fmt_duration() {
-	# seconds -> HH:MM:SS
 	local s="$1"
 	local h=$((s / 3600))
 	local m=$(((s % 3600) / 60))
@@ -89,7 +87,6 @@ while :; do
 
 	tmp="$(mktemp -t ralph_ndjson.XXXXXX)"
 
-	# Stream assistant text live, but also keep the full NDJSON for extracting the terminal result.
 	claude --print \
 		--output-format=stream-json \
 		--include-partial-messages \
@@ -111,7 +108,6 @@ while :; do
 		exit "$rc"
 	fi
 
-	# Get the final aggregated text from the terminal result event (authoritative).
 	final="$(jq -r 'select(.type=="result") | .result // empty' "$tmp" | tail -n 1)"
 	rm -f "$tmp"
 
