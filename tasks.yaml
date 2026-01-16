@@ -420,7 +420,7 @@ tasks:
       - Capture stderr separately
       - Handle context cancellation (kill process)
       - Save raw NDJSON to .ralph/logs/claude/{timestamp}-{task}.ndjson
-    status: open
+    status: completed
     acceptance:
       - "Command built with correct flags"
       - "Stdout streamed to parser and file"

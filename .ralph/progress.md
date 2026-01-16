@@ -270,3 +270,29 @@
 - TDD approach: wrote 19 tests covering empty input, system/init, assistant messages, result success/error, permission denials, malformed lines, large lines, and edge cases
 
 **Outcome**: Success - all 29 claude tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: claude-runner-subprocess (Subprocess Execution)
+
+**What changed:**
+- Implemented `SubprocessRunner` struct in `internal/claude/exec.go` that implements the `Runner` interface
+- `NewSubprocessRunner(command, logsDir)` constructor for creating runner instances with configurable Claude binary and log directory
+- `Run(ctx, req)` method executes Claude Code as subprocess with proper argument building
+- `buildArgs(req)` helper constructs CLI flags: --output-format=stream-json, --system-prompt, --allowedTools, --continue, -p
+- Sets working directory from `req.Cwd` and merges environment variables from `req.Env`
+- Uses `io.TeeReader` to stream stdout to both NDJSON parser and log file simultaneously
+- `generateLogFilename(taskID)` creates unique timestamped log filenames with sanitized task IDs
+- Handles context cancellation to kill subprocess on timeout
+- Raw NDJSON logs saved to configured logs directory
+
+**Files touched:**
+- `internal/claude/exec.go` (new)
+- `internal/claude/exec_test.go` (new)
+
+**Learnings:**
+- Use `exec.CommandContext` for context-aware subprocess execution with automatic process kill on cancellation
+- `io.TeeReader` allows simultaneous writing to log file while buffering for parser
+- Sanitize task IDs for filenames using regex to replace invalid characters (slashes, spaces, etc.)
+- For deferred file close with linter compliance, use `defer func() { _ = logFile.Close() }()` pattern
+- TDD approach: wrote 20 tests covering argument building, log filename generation, working directory, environment variables, context cancellation, valid NDJSON parsing, error results, and permission denials
+
+**Outcome**: Success - all 49 claude tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
