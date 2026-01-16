@@ -433,3 +433,31 @@
 - TDD approach: wrote 26 integration tests covering all interface methods, context cancellation/timeout, non-git-repo errors, and edge cases
 
 **Outcome**: Success - all 40 git tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: git-manager-commit-template (Commit Message Templates)
+
+**What changed:**
+- Implemented commit message formatting in `internal/git/commit.go`
+- Created `CommitType` type with constants: `CommitTypeFeat`, `CommitTypeFix`, `CommitTypeChore`
+- Implemented `InferCommitType(title)` that analyzes task title keywords to determine commit type:
+  - "add", "implement", "create", "new" → feat
+  - "fix", "repair", "resolve", "correct" → fix
+  - "update", "refactor", "clean", "remove", "rename", "move" → chore
+  - Default: chore
+- Implemented `FormatCommitMessage(taskTitle, iterationID)` that creates conventional commit format
+- Implemented `FormatCommitMessageWithType(commitType, taskTitle, iterationID)` for explicit type override
+- Implemented `ParseConventionalCommit(message)` that parses commit type, subject, and body
+- Implemented `ValidateCommitMessage(message)` for commit message validation
+- Message format: `<type>: <title>\n\nRalph iteration: <iterationID>`
+
+**Files touched:**
+- `internal/git/commit.go` (new)
+- `internal/git/commit_test.go` (new)
+
+**Learnings:**
+- Use `strings.Cut()` instead of `strings.Index()` + manual slicing for cleaner code (Go 1.18+)
+- Keyword matching with `strings.HasPrefix` for case-insensitive detection (after lowercasing)
+- Conventional commit parsing: split on first colon, then handle optional body after blank line
+- TDD approach: wrote 37 tests first covering commit type string conversion, type inference from keywords, message formatting with/without iteration ID, conventional commit parsing, and validation edge cases
+
+**Outcome**: Success - all 59 git tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

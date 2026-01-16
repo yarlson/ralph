@@ -617,7 +617,7 @@ tasks:
       - Include task title in message
       - Add iteration metadata in commit body
       - FormatCommitMessage(task *Task, iterationID string) string
-    status: open
+    status: completed
     acceptance:
       - "Commit messages follow conventional format"
       - "Task title included"
