@@ -768,3 +768,34 @@
 - TDD approach: wrote 12 tests covering command structure, error cases (no parent-task-id, nonexistent parent), various task count scenarios, next task display, last iteration info, and graceful handling of missing data
 
 **Outcome**: Success - all 51 cmd tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: cli-pause-resume (ralph pause/resume Commands)
+
+**What changed:**
+- Implemented `ralph pause` command in `cmd/pause.go` that sets the paused flag
+- Implemented `ralph resume` command in `cmd/resume.go` that clears the paused flag
+- Added `IsPaused(root)`, `SetPaused(root, paused)`, and `PausedFilePath(root)` functions to `internal/state/state.go`
+- Paused state stored as `.ralph/state/paused` file (presence = paused, absence = not paused)
+- Updated `cmd/run.go` to check paused state before running - returns error if paused
+- Removed stub `newPauseCmd()` and `newResumeCmd()` from `cmd/root.go`
+- Both commands handle edge cases: pause when already paused (shows message), resume when not paused (shows message)
+
+**Files touched:**
+- `internal/state/state.go` (added PausedFile constant, IsPaused, SetPaused, PausedFilePath functions)
+- `internal/state/state_test.go` (added 14 new tests for pause functionality)
+- `cmd/pause.go` (new)
+- `cmd/pause_test.go` (new)
+- `cmd/resume.go` (new)
+- `cmd/resume_test.go` (new)
+- `cmd/run.go` (added paused state check)
+- `cmd/run_test.go` (added TestRunCmd_RespectsPausedState, cleaned up unused mocks)
+- `cmd/root.go` (removed pause/resume stub commands)
+- `cmd/root_test.go` (removed pause/resume from stub commands list)
+
+**Learnings:**
+- Simple file-based flag pattern (file existence = state) is clean and atomic - no parsing needed
+- Using `errors.Is(err, os.ErrNotExist)` is the idiomatic way to check for missing file
+- The run command checks paused state early (before loading config) to fail fast
+- TDD approach: wrote 13 tests covering command structure, error cases, setting/clearing flag, and run respecting paused state
+
+**Outcome**: Success - all tests pass (15 state tests, 66 cmd tests), `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

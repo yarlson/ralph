@@ -46,6 +46,12 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
+	// Check if paused
+	paused, err := state.IsPaused(workDir)
+	if err == nil && paused {
+		return fmt.Errorf("ralph is paused. Use 'ralph resume' to continue")
+	}
+
 	// Load configuration
 	cfg, err := config.LoadConfig(workDir)
 	if err != nil {

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,78 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yarlson/go-ralph/internal/claude"
 	"github.com/yarlson/go-ralph/internal/loop"
 	"github.com/yarlson/go-ralph/internal/taskstore"
-	"github.com/yarlson/go-ralph/internal/verifier"
 )
-
-// mockClaudeRunner for testing
-type mockClaudeRunner struct {
-	response *claude.ClaudeResponse
-	err      error
-}
-
-func (m *mockClaudeRunner) Run(ctx context.Context, req claude.ClaudeRequest) (*claude.ClaudeResponse, error) {
-	return m.response, m.err
-}
-
-// mockVerifier for testing
-type mockVerifier struct {
-	results []verifier.VerificationResult
-	err     error
-}
-
-func (m *mockVerifier) Verify(ctx context.Context, commands [][]string) ([]verifier.VerificationResult, error) {
-	return m.results, m.err
-}
-
-func (m *mockVerifier) VerifyTask(ctx context.Context, commands [][]string) ([]verifier.VerificationResult, error) {
-	return m.Verify(ctx, commands)
-}
-
-// mockGitManager for testing
-type mockGitManager struct {
-	currentCommit  string
-	hasChanges     bool
-	changedFiles   []string
-	commitHash     string
-	currentBranch  string
-	diffStat       string
-	ensureBranchErr error
-	commitErr      error
-}
-
-func (m *mockGitManager) EnsureBranch(ctx context.Context, branchName string) error {
-	return m.ensureBranchErr
-}
-
-func (m *mockGitManager) GetCurrentCommit(ctx context.Context) (string, error) {
-	return m.currentCommit, nil
-}
-
-func (m *mockGitManager) HasChanges(ctx context.Context) (bool, error) {
-	return m.hasChanges, nil
-}
-
-func (m *mockGitManager) GetDiffStat(ctx context.Context) (string, error) {
-	return m.diffStat, nil
-}
-
-func (m *mockGitManager) GetChangedFiles(ctx context.Context) ([]string, error) {
-	return m.changedFiles, nil
-}
-
-func (m *mockGitManager) Commit(ctx context.Context, message string) (string, error) {
-	if m.commitErr != nil {
-		return "", m.commitErr
-	}
-	return m.commitHash, nil
-}
-
-func (m *mockGitManager) GetCurrentBranch(ctx context.Context) (string, error) {
-	return m.currentBranch, nil
-}
 
 func TestNewRunCmd(t *testing.T) {
 	cmd := newRunCmd()
@@ -310,3 +240,38 @@ func TestFormatRunResult(t *testing.T) {
 
 // Helper function for tests - defined in run.go
 // formatRunResult formats a RunResult for CLI output
+
+func TestRunCmd_RespectsPausedState(t *testing.T) {
+	// Set up temp directory
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create ralph dir structure with paused file
+	err = os.MkdirAll(filepath.Join(tmpDir, ".ralph", "state"), 0755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755)
+	require.NoError(t, err)
+
+	// Create paused file
+	err = os.WriteFile(filepath.Join(tmpDir, ".ralph", "state", "paused"), []byte{}, 0644)
+	require.NoError(t, err)
+
+	// Write parent-task-id file
+	err = os.WriteFile(filepath.Join(tmpDir, ".ralph", "parent-task-id"), []byte("parent-task"), 0644)
+	require.NoError(t, err)
+
+	// Run command - should fail with paused message
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run"})
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+
+	err = rootCmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "paused")
+}

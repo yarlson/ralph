@@ -980,7 +980,7 @@ tasks:
       - pause: writes .ralph/state/paused flag
       - resume: removes paused flag
       - run command checks paused state
-    status: open
+    status: completed
     acceptance:
       - "Pause sets flag"
       - "Resume clears flag"

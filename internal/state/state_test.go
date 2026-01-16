@@ -128,3 +128,101 @@ func TestRalphDirPath(t *testing.T) {
 		assert.Equal(t, "/some/project/.ralph/archive", ArchiveDirPath(root))
 	})
 }
+
+func TestPausedFilePath(t *testing.T) {
+	root := "/some/project"
+	expected := "/some/project/.ralph/state/paused"
+	assert.Equal(t, expected, PausedFilePath(root))
+}
+
+func TestIsPaused(t *testing.T) {
+	t.Run("returns error when state dir does not exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		paused, err := IsPaused(tmpDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), ".ralph/state")
+		assert.False(t, paused)
+	})
+
+	t.Run("returns false when not paused", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		paused, err := IsPaused(tmpDir)
+		require.NoError(t, err)
+		assert.False(t, paused)
+	})
+
+	t.Run("returns true when paused", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		// Create paused file
+		pausedPath := PausedFilePath(tmpDir)
+		require.NoError(t, os.WriteFile(pausedPath, []byte{}, 0644))
+
+		paused, err := IsPaused(tmpDir)
+		require.NoError(t, err)
+		assert.True(t, paused)
+	})
+}
+
+func TestSetPaused(t *testing.T) {
+	t.Run("returns error when state dir does not exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		err := SetPaused(tmpDir, true)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), ".ralph/state")
+	})
+
+	t.Run("creates paused file when setting paused to true", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		err := SetPaused(tmpDir, true)
+		require.NoError(t, err)
+
+		// Verify file exists
+		pausedPath := PausedFilePath(tmpDir)
+		_, err = os.Stat(pausedPath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("removes paused file when setting paused to false", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		// Create paused file first
+		pausedPath := PausedFilePath(tmpDir)
+		require.NoError(t, os.WriteFile(pausedPath, []byte{}, 0644))
+
+		err := SetPaused(tmpDir, false)
+		require.NoError(t, err)
+
+		// Verify file was removed
+		_, err = os.Stat(pausedPath)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("succeeds when removing non-existent paused file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		err := SetPaused(tmpDir, false)
+		require.NoError(t, err)
+	})
+
+	t.Run("is idempotent - setting paused twice succeeds", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		require.NoError(t, SetPaused(tmpDir, true))
+		require.NoError(t, SetPaused(tmpDir, true))
+
+		paused, err := IsPaused(tmpDir)
+		require.NoError(t, err)
+		assert.True(t, paused)
+	})
+}

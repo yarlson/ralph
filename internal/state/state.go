@@ -2,6 +2,7 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ const (
 	LogsDir       = "logs"
 	ClaudeLogsDir = "claude"
 	ArchiveDir    = "archive"
+	PausedFile    = "paused"
 )
 
 // RalphDirPath returns the path to the .ralph directory.
@@ -80,5 +82,54 @@ func EnsureRalphDir(root string) error {
 		}
 	}
 
+	return nil
+}
+
+// PausedFilePath returns the path to the paused state file.
+func PausedFilePath(root string) string {
+	return filepath.Join(root, RalphDir, StateDir, PausedFile)
+}
+
+// IsPaused checks if the loop is currently paused.
+func IsPaused(root string) (bool, error) {
+	stateDir := StateDirPath(root)
+	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
+		return false, fmt.Errorf(".ralph/state directory does not exist")
+	}
+
+	pausedPath := PausedFilePath(root)
+	_, err := os.Stat(pausedPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check paused state: %w", err)
+	}
+	return true, nil
+}
+
+// SetPaused sets the paused state.
+func SetPaused(root string, paused bool) error {
+	stateDir := StateDirPath(root)
+	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
+		return fmt.Errorf(".ralph/state directory does not exist")
+	}
+
+	pausedPath := PausedFilePath(root)
+
+	if paused {
+		// Create paused file
+		file, err := os.Create(pausedPath)
+		if err != nil {
+			return fmt.Errorf("failed to create paused file: %w", err)
+		}
+		return file.Close()
+	}
+
+	// Remove paused file
+	err := os.Remove(pausedPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove paused file: %w", err)
+	}
 	return nil
 }

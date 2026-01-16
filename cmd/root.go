@@ -48,29 +48,6 @@ func Execute() {
 // errNotImplemented is returned by stub commands
 var errNotImplemented = errors.New("not implemented")
 
-
-func newPauseCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "pause",
-		Short: "Pause the iteration loop",
-		Long:  "Set a pause flag to stop the loop after the current iteration.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("pause: %w", errNotImplemented)
-		},
-	}
-}
-
-func newResumeCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "resume",
-		Short: "Resume the iteration loop",
-		Long:  "Clear the pause flag to allow the loop to continue.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("resume: %w", errNotImplemented)
-		},
-	}
-}
-
 func newRetryCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "retry",
