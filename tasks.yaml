@@ -81,7 +81,7 @@ tasks:
       - verification (commands)
       - loop (max_iterations, max_minutes_per_iteration, gutter settings)
       - safety (sandbox, allowed_commands)
-    status: open
+    status: completed
     acceptance:
       - "Config struct with all fields from PRD ralph.yaml example"
       - "LoadConfig function reads ralph.yaml from repo root"
