@@ -1777,3 +1777,33 @@
 - The Controller doesn't store full config but extracts needed values via setter methods for cleaner dependency management
 
 **Outcome**: Success - all tests pass (go test ./...), build succeeds (go build ./...), config defaults verified
+
+### 2026-01-16: ralph-align-agents-md (Support AGENTS.md Updates)
+
+**What changed:**
+
+- Created `internal/memory/agents.go` with `FindAgentsMd()` and `ReadAgentsMd()` functions
+- `FindAgentsMd()` walks directory tree to find all AGENTS.md files, skipping hidden directories
+- `ReadAgentsMd()` reads and concatenates all AGENTS.md files with file path headers and truncation at 10KB per file
+- Modified `internal/prompt/iteration.go` to add `AgentsContent` field to `IterationContext`
+- Updated `BuildSystemPrompt()` to include guidance: "Update AGENTS.md only with durable, reusable patterns (not task-specific)"
+- Updated `BuildUserPrompt()` to include existing AGENTS.md content in prompts when available
+- AGENTS.md content is shown in "### Existing AGENTS.md Files" section and truncated using same mechanism as patterns
+
+**Files touched:**
+
+- `internal/memory/agents.go` (new)
+- `internal/memory/agents_test.go` (new)
+- `internal/prompt/iteration.go` (modified)
+- `internal/prompt/iteration_test.go` (modified)
+- `tasks.yaml` (marked ralph-align-agents-md as completed)
+
+**Learnings:**
+
+- `filepath.WalkDir` is efficient for searching directory trees and allows skipping directories with `filepath.SkipDir`
+- Skipping hidden directories (starting with ".") prevents scanning `.git`, `.ralph`, etc. which improves performance
+- Reading files in directory walk should be graceful - skip files that can't be read rather than failing entire operation
+- Truncation with markers maintains consistency with existing patterns truncation in prompt builder
+- Adding AGENTS.md guidance to system prompt (rule 6) and including existing content helps Claude understand when and how to use AGENTS.md files
+
+**Outcome**: Success - all tests pass, `go build ./...` and `go test ./...` succeed

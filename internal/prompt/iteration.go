@@ -17,6 +17,9 @@ type IterationContext struct {
 	// CodebasePatterns is the Codebase Patterns section from progress.md.
 	CodebasePatterns string
 
+	// AgentsContent is the content from all AGENTS.md files found in the codebase.
+	AgentsContent string
+
 	// DiffStat is the output of git diff --stat.
 	DiffStat string
 
@@ -112,8 +115,9 @@ You implement one task at a time. The harness manages task selection, verificati
 3. Do NOT commit changes - the harness will commit after verification passes.
 4. Update .ralph/progress.md with: what changed, files touched, learnings/gotchas.
 5. Update CLAUDE.md ONLY with durable guidance (no task-specific notes).
-6. Prefer minimal, surgical changes. Avoid over-engineering.
-7. Follow existing codebase patterns and conventions.
+6. Update AGENTS.md only with durable, reusable patterns (not task-specific).
+7. Prefer minimal, surgical changes. Avoid over-engineering.
+8. Follow existing codebase patterns and conventions.
 
 ## Completion
 When done:
@@ -161,6 +165,15 @@ func (b *Builder) BuildUserPrompt(ctx IterationContext) (string, error) {
 		sb.WriteString("### Codebase Patterns\n")
 		sb.WriteString("Follow these patterns discovered during implementation:\n")
 		sb.WriteString(patterns)
+		sb.WriteString("\n\n")
+	}
+
+	// Existing AGENTS.md content
+	if ctx.AgentsContent != "" {
+		agents := truncateWithMarker(ctx.AgentsContent, b.opts.MaxPatternsBytes)
+		sb.WriteString("### Existing AGENTS.md Files\n")
+		sb.WriteString("The following AGENTS.md files exist in the codebase with durable patterns:\n")
+		sb.WriteString(agents)
 		sb.WriteString("\n\n")
 	}
 

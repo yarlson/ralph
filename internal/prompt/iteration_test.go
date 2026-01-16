@@ -415,3 +415,59 @@ func TestBuilderBuild(t *testing.T) {
 	assert.NotEmpty(t, result.SystemPrompt)
 	assert.NotEmpty(t, result.UserPrompt)
 }
+
+func TestBuilderBuildSystemPrompt_IncludesAgentsGuidance(t *testing.T) {
+	builder := NewBuilder(nil)
+	systemPrompt := builder.BuildSystemPrompt()
+
+	assert.Contains(t, systemPrompt, "AGENTS.md", "should include AGENTS.md guidance")
+	assert.Contains(t, systemPrompt, "durable", "should mention durable patterns")
+}
+
+func TestBuilderBuildUserPrompt_WithAgentsContent(t *testing.T) {
+	builder := NewBuilder(nil)
+	task := &taskstore.Task{
+		ID:          "test-task",
+		Title:       "Test Task",
+		Description: "Test description",
+		Status:      taskstore.StatusOpen,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	agentsContent := "### From: /path/to/AGENTS.md\n\n# Patterns\n- Pattern 1\n- Pattern 2"
+	ctx := IterationContext{
+		Task:          task,
+		AgentsContent: agentsContent,
+	}
+
+	prompt, err := builder.BuildUserPrompt(ctx)
+
+	require.NoError(t, err)
+	assert.Contains(t, prompt, "Pattern 1")
+	assert.Contains(t, prompt, "Pattern 2")
+	assert.Contains(t, prompt, "AGENTS.md")
+}
+
+func TestBuilderBuildUserPrompt_WithoutAgentsContent(t *testing.T) {
+	builder := NewBuilder(nil)
+	task := &taskstore.Task{
+		ID:          "test-task",
+		Title:       "Test Task",
+		Description: "Test description",
+		Status:      taskstore.StatusOpen,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	ctx := IterationContext{
+		Task:          task,
+		AgentsContent: "",
+	}
+
+	prompt, err := builder.BuildUserPrompt(ctx)
+
+	require.NoError(t, err)
+	// Should not include AGENTS.md section when content is empty
+	assert.NotContains(t, prompt, "### Existing AGENTS.md")
+}

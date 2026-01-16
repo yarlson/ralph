@@ -456,7 +456,7 @@ tasks:
       Create internal/memory/agents.go with FindAgentsMd and ReadAgentsMd.
       Modify internal/prompt/iteration.go to include AGENTS.md guidance
       and existing AGENTS.md content in prompts.
-    status: open
+    status: completed
     acceptance:
       - "System prompt includes AGENTS.md guidance"
       - "Existing AGENTS.md files read and included in context"
