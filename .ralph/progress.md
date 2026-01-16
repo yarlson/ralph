@@ -1157,3 +1157,31 @@
 - Task status transitions: open -> in_progress -> (on failure: open/failed based on retries OR on success: completed)
 
 **Outcome**: Success - all tests pass, acceptance criteria met: tasks failing max retries marked failed, gutter detection sets blocked status, retry attempt tracking implemented
+
+### 2026-01-16: ralph-align-logs-cmd (Add ralph logs Command)
+
+**What changed:**
+
+- Implemented `ralph logs` command in `cmd/logs.go`
+- Added `--iteration <id>` flag to show specific iteration details
+- Without flag, lists all available iterations sorted by time (newest first)
+- Registered command in `cmd/root.go` (added between status and pause commands)
+- Created comprehensive test suite with 13 tests in `cmd/logs_test.go`
+
+**Files touched:**
+
+- `cmd/logs.go` (new)
+- `cmd/logs_test.go` (new)
+- `cmd/root.go` (added newLogsCmd() registration)
+
+**Learnings:**
+
+- Use `os.Stat()` to check file existence before calling `loop.LoadRecord()` to provide clearer "not found" error messages instead of letting the file read error propagate
+- When listing iterations, skip non-iteration files and invalid JSON files gracefully by continuing the loop rather than failing
+- Sort iterations by `StartTime` for display (newest first) using `sort.Slice` with `After()` comparison
+- Format iteration details with sections: header, timing, Claude info, git commits, files changed, verification results, feedback
+- For failed verification output, show last 10 lines with truncation marker to keep output readable
+- Reuse `loop.LoadRecord()` and iteration record structures instead of reimplementing JSON parsing
+- Follow the CLI pattern from other commands: use `cmd.OutOrStdout()` for output to enable test capture
+
+**Outcome**: Success - all tests pass, all acceptance criteria met: lists all iterations, shows specific iteration details, clear error on missing iteration, formatted for readability

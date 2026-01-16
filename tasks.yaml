@@ -75,7 +75,7 @@ tasks:
       Create cmd/logs.go with --iteration flag to show specific iteration log.
       List available iterations if no flag provided.
       Read from .ralph/logs/iteration-<n>.json and pretty-print.
-    status: open
+    status: completed
     acceptance:
       - "ralph logs lists all iterations"
       - "ralph logs --iteration 5 shows iteration 5 details"
