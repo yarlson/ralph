@@ -939,7 +939,7 @@ tasks:
       - Loads parent task ID
       - Invokes LoopController
       - Displays progress
-    status: open
+    status: completed
     acceptance:
       - "Loop execution works"
       - "--once flag works"

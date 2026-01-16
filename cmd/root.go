@@ -48,16 +48,6 @@ func Execute() {
 // errNotImplemented is returned by stub commands
 var errNotImplemented = errors.New("not implemented")
 
-func newRunCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "run",
-		Short: "Run the iteration loop",
-		Long:  "Execute the iteration loop until all tasks are done or limits are reached.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("run: %w", errNotImplemented)
-		},
-	}
-}
 
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{

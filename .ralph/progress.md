@@ -714,3 +714,32 @@
 - BFS traversal with parent-to-children map efficiently gathers all descendants
 
 **Outcome**: Success - all 31 cmd tests pass (16 init tests + 15 root tests), `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: cli-run (ralph run Command)
+
+**What changed:**
+- Implemented `ralph run` command in `cmd/run.go`
+- Added `--once` flag for single iteration mode (invokes `controller.RunOnce`)
+- Added `--max-iterations N` flag to override config limit (0 uses config default)
+- Reads parent task ID from `.ralph/parent-task-id` file (requires `ralph init` first)
+- Creates all necessary dependencies: TaskStore, ClaudeRunner, Verifier, GitManager, ProgressFile
+- Invokes `LoopController.RunLoop` or `RunOnce` based on flags
+- Configures budget limits and gutter detection from config
+- Implements graceful shutdown via signal handling (SIGINT, SIGTERM) with context cancellation
+- Displays formatted run result with outcome, message, iterations, completed/failed tasks, cost, and elapsed time
+- Removed stub `newRunCmd` from root.go, updated root_test.go to exclude `run` from stub commands
+
+**Files touched:**
+- `cmd/run.go` (new)
+- `cmd/run_test.go` (new)
+- `cmd/root.go` (removed stub newRunCmd function)
+- `cmd/root_test.go` (removed "run" from stub commands list)
+
+**Learnings:**
+- Use `signal.Notify` with `context.WithCancel` for graceful shutdown pattern
+- `NewSubprocessRunner` takes a single string command, not a slice - extract first element from config
+- Use `cmd.OutOrStdout()` and `cmd.ErrOrStderr()` for proper output handling in tests
+- Tests change working directory with `os.Chdir` to temp dir for isolation
+- TDD approach: wrote 14 tests covering command structure, flags, error cases (no parent-task-id, nonexistent parent), and result formatting
+
+**Outcome**: Success - all 39 cmd tests pass, `go build ./...` and `go test ./...` succeed
