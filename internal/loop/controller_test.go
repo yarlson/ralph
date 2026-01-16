@@ -1582,3 +1582,58 @@ func TestController_RunLoop_EnsuresFeatureBranch(t *testing.T) {
 	assert.Equal(t, RunOutcomeCompleted, result.Outcome)
 }
 
+func TestController_SetSandboxMode(t *testing.T) {
+	t.Run("sandbox mode disabled by default", func(t *testing.T) {
+		deps := ControllerDeps{
+			TaskStore:    newMockTaskStore(),
+			Claude:       &mockClaudeRunner{},
+			Verifier:     &mockVerifier{},
+			Git:          &mockGitManager{},
+			LogsDir:      t.TempDir(),
+			ProgressFile: memory.NewProgressFile(filepath.Join(t.TempDir(), "progress.md")),
+		}
+		ctrl := NewController(deps)
+
+		assert.False(t, ctrl.sandboxEnabled)
+		assert.Nil(t, ctrl.allowedTools)
+	})
+
+	t.Run("can enable sandbox mode with allowed tools", func(t *testing.T) {
+		deps := ControllerDeps{
+			TaskStore:    newMockTaskStore(),
+			Claude:       &mockClaudeRunner{},
+			Verifier:     &mockVerifier{},
+			Git:          &mockGitManager{},
+			LogsDir:      t.TempDir(),
+			ProgressFile: memory.NewProgressFile(filepath.Join(t.TempDir(), "progress.md")),
+		}
+		ctrl := NewController(deps)
+
+		allowedTools := []string{"Read", "Edit", "Bash"}
+		ctrl.SetSandboxMode(true, allowedTools)
+
+		assert.True(t, ctrl.sandboxEnabled)
+		assert.Equal(t, allowedTools, ctrl.allowedTools)
+	})
+
+	t.Run("can disable sandbox mode", func(t *testing.T) {
+		deps := ControllerDeps{
+			TaskStore:    newMockTaskStore(),
+			Claude:       &mockClaudeRunner{},
+			Verifier:     &mockVerifier{},
+			Git:          &mockGitManager{},
+			LogsDir:      t.TempDir(),
+			ProgressFile: memory.NewProgressFile(filepath.Join(t.TempDir(), "progress.md")),
+		}
+		ctrl := NewController(deps)
+
+		// Enable first
+		ctrl.SetSandboxMode(true, []string{"Read"})
+		assert.True(t, ctrl.sandboxEnabled)
+
+		// Then disable
+		ctrl.SetSandboxMode(false, nil)
+		assert.False(t, ctrl.sandboxEnabled)
+	})
+}
+

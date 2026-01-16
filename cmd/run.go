@@ -126,9 +126,9 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 		claudeRunner.WithBaseArgs(claudeArgs)
 	}
 
-	// Create verifier
+	// Create verifier with sandbox mode enforcement if enabled
 	ver := verifier.NewCommandRunner(workDir)
-	if len(cfg.Safety.AllowedCommands) > 0 {
+	if cfg.Safety.Sandbox && len(cfg.Safety.AllowedCommands) > 0 {
 		ver.SetAllowedCommands(cfg.Safety.AllowedCommands)
 	}
 
@@ -178,6 +178,11 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	// Configure branch override if specified
 	if branch != "" {
 		controller.SetBranchOverride(branch)
+	}
+
+	// Configure sandbox mode if enabled
+	if cfg.Safety.Sandbox {
+		controller.SetSandboxMode(cfg.Safety.Sandbox, cfg.Safety.AllowedCommands)
 	}
 
 	// Set up context with signal handling for graceful shutdown

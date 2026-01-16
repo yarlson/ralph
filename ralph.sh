@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-set -x
 
 read -r -d '' PROMPT <<'EOF' || true
 Read SPEC.md, tasks.yaml, and .ralph/progress.md.

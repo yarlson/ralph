@@ -175,5 +175,5 @@ func setDefaults(v *viper.Viper) {
 
 	// Safety defaults
 	v.SetDefault("safety.sandbox", false)
-	v.SetDefault("safety.allowed_commands", []string{})
+	v.SetDefault("safety.allowed_commands", []string{"npm", "go", "git"})
 }

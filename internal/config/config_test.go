@@ -112,7 +112,7 @@ func TestLoadConfig_WithDefaults(t *testing.T) {
 	assert.Equal(t, 2, cfg.Loop.Gutter.MaxChurnCommits)
 
 	assert.False(t, cfg.Safety.Sandbox)
-	assert.Empty(t, cfg.Safety.AllowedCommands)
+	assert.Equal(t, []string{"npm", "go", "git"}, cfg.Safety.AllowedCommands)
 }
 
 func TestLoadConfig_PartialOverride(t *testing.T) {
@@ -269,4 +269,53 @@ func TestLoadConfigWithFile_FallbackToDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 50, cfg.Loop.MaxIterations)
+}
+
+func TestConfig_SandboxMode(t *testing.T) {
+	t.Run("sandbox disabled by default", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg, err := LoadConfig(tmpDir)
+		require.NoError(t, err)
+
+		assert.False(t, cfg.Safety.Sandbox)
+		assert.Equal(t, []string{"npm", "go", "git"}, cfg.Safety.AllowedCommands)
+	})
+
+	t.Run("sandbox can be enabled with custom allowlist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ralph.yaml")
+
+		configContent := `
+safety:
+  sandbox: true
+  allowed_commands: ["go", "npm"]
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(tmpDir)
+		require.NoError(t, err)
+
+		assert.True(t, cfg.Safety.Sandbox)
+		assert.Equal(t, []string{"go", "npm"}, cfg.Safety.AllowedCommands)
+	})
+
+	t.Run("sandbox enabled with empty allowlist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ralph.yaml")
+
+		configContent := `
+safety:
+  sandbox: true
+  allowed_commands: []
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(tmpDir)
+		require.NoError(t, err)
+
+		assert.True(t, cfg.Safety.Sandbox)
+		assert.Empty(t, cfg.Safety.AllowedCommands)
+	})
 }

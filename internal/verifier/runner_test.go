@@ -229,6 +229,20 @@ func TestCommandRunner_Allowlist(t *testing.T) {
 		require.Len(t, results, 1)
 		assert.True(t, results[0].Passed)
 	})
+
+	t.Run("clearing allowlist with empty slice removes restrictions", func(t *testing.T) {
+		runner := NewCommandRunner("")
+		runner.SetAllowedCommands([]string{"go"})
+		// Now clear it
+		runner.SetAllowedCommands([]string{})
+		ctx := context.Background()
+
+		// echo should now work again
+		results, err := runner.Verify(ctx, [][]string{{"echo", "allowed"}})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.True(t, results[0].Passed)
+	})
 }
 
 func TestCommandRunner_OutputSize(t *testing.T) {

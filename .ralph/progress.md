@@ -1583,3 +1583,48 @@
 - Error handling should distinguish between "task not found" (acceptable) and other errors (return)
 
 **Outcome**: Success - all tests pass (go test ./...), command fully functional with comprehensive error handling and user experience features (warnings, confirmations, clear messaging)
+
+
+### 2026-01-16: ralph-align-sandbox (Implement Sandbox Mode Guard)
+
+**What changed:**
+
+- Enhanced `cmd/run.go` to enforce sandbox mode by checking `cfg.Safety.Sandbox` before applying allowed commands to verifier
+- Added `SetSandboxMode()` method to `internal/loop/controller.go` to configure sandbox mode with allowed tools list
+- Added `sandboxEnabled` and `allowedTools` fields to Controller struct
+- Modified both ClaudeRequest creation points (initial and retry) to include `AllowedTools` when sandbox mode is enabled
+- Updated `internal/config/config.go` to set default `allowed_commands` to `["npm", "go", "git"]` (was empty)
+- Added test `TestConfig_SandboxMode` in `internal/config/config_test.go` covering:
+  - Sandbox disabled by default
+  - Sandbox enabled with custom allowlist
+  - Sandbox enabled with empty allowlist
+- Added test `TestController_SetSandboxMode` in `internal/loop/controller_test.go` covering:
+  - Sandbox mode disabled by default
+  - Can enable sandbox mode with allowed tools
+  - Can disable sandbox mode
+- Updated `TestLoadConfig_WithDefaults` to verify default allowed_commands is `["npm", "go", "git"]`
+- Added test case in `TestCommandRunner_Allowlist` for clearing allowlist with empty slice
+
+**Files touched:**
+
+- `cmd/run.go` (modified - added sandbox mode enforcement check)
+- `internal/loop/controller.go` (modified - added SetSandboxMode method, sandboxEnabled/allowedTools fields, applied to ClaudeRequest)
+- `internal/config/config.go` (modified - updated default allowed_commands)
+- `internal/config/config_test.go` (modified - added TestConfig_SandboxMode, updated defaults test)
+- `internal/loop/controller_test.go` (modified - added TestController_SetSandboxMode)
+- `internal/verifier/runner_test.go` (modified - added allowlist clearing test case)
+- `tasks.yaml` (marked ralph-align-sandbox as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- Sandbox mode requires coordination between multiple layers: config, cmd layer (for verifier), and controller (for Claude Code)
+- The verifier already had `SetAllowedCommands()` implemented but wasn't gated by sandbox flag
+- Claude Code's `--allowedTools` flag is passed via the `AllowedTools` field in `ClaudeRequest`
+- Default values in config should match PRD spec expectations - defaulting to common safe commands is better than empty
+- Both initial and retry ClaudeRequest invocations need the same sandbox mode restrictions applied
+- Testing strategy: config layer tests verify loading/defaults, controller layer tests verify state management, integration happens via cmd layer
+- The sandbox mode check should be `cfg.Safety.Sandbox && len(cfg.Safety.AllowedCommands) > 0` to avoid accidentally blocking when empty
+- Verifier allowlist enforcement was already implemented correctly, just needed to be conditionally enabled
+
+**Outcome**: Success - all tests pass (go test ./..., go build ./...), sandbox mode fully functional with proper gating and tool restrictions

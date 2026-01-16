@@ -122,6 +122,10 @@ type Controller struct {
 	taskAttempts           map[string]int // tracks attempt count per task ID
 	configVerifyCommands   [][]string     // global verification commands from config
 	branchOverride         string         // optional branch name override
+
+	// Sandbox mode configuration
+	sandboxEnabled bool
+	allowedTools   []string
 }
 
 // NewController creates a new loop controller with the given dependencies.
@@ -171,6 +175,13 @@ func (c *Controller) SetConfigVerifyCommands(commands [][]string) {
 // SetBranchOverride sets an optional branch name override instead of auto-generating from task title.
 func (c *Controller) SetBranchOverride(branch string) {
 	c.branchOverride = branch
+}
+
+// SetSandboxMode configures sandbox mode for Claude Code tool restrictions.
+// When enabled, only the specified allowed tools can be used.
+func (c *Controller) SetSandboxMode(enabled bool, allowedTools []string) {
+	c.sandboxEnabled = enabled
+	c.allowedTools = allowedTools
 }
 
 // slugify converts a string to a branch-safe slug by:
@@ -502,6 +513,11 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		Prompt:       userPrompt,
 	}
 
+	// Apply sandbox mode tool restrictions if enabled
+	if c.sandboxEnabled && len(c.allowedTools) > 0 {
+		req.AllowedTools = c.allowedTools
+	}
+
 	resp, err := c.claudeRunner.Run(iterationCtx, req)
 	if err != nil {
 		// Check if error is due to timeout
@@ -614,6 +630,11 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 				SystemPrompt: systemPrompt,
 				Prompt:       userPrompt,
 				Continue:     true, // Continue in the same session
+			}
+
+			// Apply sandbox mode tool restrictions if enabled
+			if c.sandboxEnabled && len(c.allowedTools) > 0 {
+				retryReq.AllowedTools = c.allowedTools
 			}
 
 			retryResp, err := c.claudeRunner.Run(iterationCtx, retryReq)

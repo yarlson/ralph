@@ -486,7 +486,7 @@ tasks:
       Modify internal/claude/exec.go and internal/verifier/runner.go to check
       commands against allowlist when config.Safety.Sandbox is true.
       Use Claude Code's --allowedTools flag to restrict tools.
-    status: open
+    status: completed
     acceptance:
       - "Sandbox mode blocks disallowed commands"
       - "Clear error message when blocked"
