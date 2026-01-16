@@ -8,6 +8,7 @@ import (
 	"github.com/yarlson/go-ralph/internal/claude"
 	"github.com/yarlson/go-ralph/internal/git"
 	"github.com/yarlson/go-ralph/internal/memory"
+	"github.com/yarlson/go-ralph/internal/prompt"
 	"github.com/yarlson/go-ralph/internal/selector"
 	"github.com/yarlson/go-ralph/internal/state"
 	"github.com/yarlson/go-ralph/internal/taskstore"
@@ -377,11 +378,18 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusInProgress)
 
 	// Build prompt for Claude
-	prompt := c.buildPrompt(task)
+	systemPrompt, userPrompt, err := c.buildPrompt(ctx, task)
+	if err != nil {
+		record.Complete(OutcomeFailed)
+		record.SetFeedback(fmt.Sprintf("Failed to build prompt: %v", err))
+		c.handleTaskFailure(task.ID)
+		return record
+	}
 
 	// Invoke Claude
 	req := claude.ClaudeRequest{
-		Prompt: prompt,
+		SystemPrompt: systemPrompt,
+		Prompt:       userPrompt,
 	}
 
 	resp, err := c.claudeRunner.Run(ctx, req)
@@ -475,36 +483,39 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	return record
 }
 
-// buildPrompt constructs the prompt for Claude.
-func (c *Controller) buildPrompt(task *taskstore.Task) string {
-	var prompt string
-
-	prompt = fmt.Sprintf("## Task: %s\n\n", task.Title)
-	prompt += fmt.Sprintf("### Description\n%s\n\n", task.Description)
-
-	if len(task.Acceptance) > 0 {
-		prompt += "### Acceptance Criteria\n"
-		for _, a := range task.Acceptance {
-			prompt += fmt.Sprintf("- %s\n", a)
-		}
-		prompt += "\n"
+// buildPrompt constructs the prompt for Claude using the full iteration prompt builder.
+func (c *Controller) buildPrompt(ctx context.Context, task *taskstore.Task) (string, string, error) {
+	// Extract codebase patterns from progress file
+	var patterns string
+	if c.progressFile != nil {
+		patterns, _ = c.progressFile.GetCodebasePatterns()
 	}
 
-	if len(task.Verify) > 0 {
-		prompt += "### Verification Commands\n"
-		prompt += "Run these commands to verify your changes:\n"
-		for _, v := range task.Verify {
-			prompt += fmt.Sprintf("- `%v`\n", v)
-		}
-		prompt += "\n"
+	// Get git diff stat if there are changes
+	var diffStat string
+	var changedFiles []string
+	hasChanges, _ := c.gitManager.HasChanges(ctx)
+	if hasChanges {
+		diffStat, _ = c.gitManager.GetDiffStat(ctx)
+		changedFiles, _ = c.gitManager.GetChangedFiles(ctx)
 	}
 
-	prompt += "### Instructions\n"
-	prompt += "1. Implement the task according to the description and acceptance criteria.\n"
-	prompt += "2. Run the verification commands and fix any failures.\n"
-	prompt += "3. Do not commit - the harness will commit after verification.\n"
+	// Build iteration context
+	iterCtx := prompt.IterationContext{
+		Task:             task,
+		CodebasePatterns: patterns,
+		DiffStat:         diffStat,
+		ChangedFiles:     changedFiles,
+	}
 
-	return prompt
+	// Build prompts using prompt builder
+	builder := prompt.NewBuilder(nil) // Use default size options
+	result, err := builder.Build(iterCtx)
+	if err != nil {
+		return "", "", err
+	}
+
+	return result.SystemPrompt, result.UserPrompt, nil
 }
 
 // formatVerificationFeedback formats verification failures for retry feedback.

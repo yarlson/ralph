@@ -1214,3 +1214,34 @@
 
 **Outcome**: Success - all tests pass, acceptance criteria met: pause flag checked between iterations, loop stops after current iteration when paused, appropriate message shown
 
+### 2026-01-16: ralph-align-iteration-prompt (Integrate Iteration Prompt Builder)
+
+**What changed:**
+
+- Modified `internal/loop/controller.go` to replace minimal prompt building with full `prompt.Builder` integration
+- Changed `buildPrompt()` method signature to return both system and user prompts, accept context parameter
+- Updated `buildPrompt()` to:
+  - Extract codebase patterns from progress file using `progressFile.GetCodebasePatterns()`
+  - Get git diff stat and changed files when uncommitted changes exist
+  - Build `prompt.IterationContext` with task, patterns, diff stat, and changed files
+  - Use `prompt.NewBuilder()` with default size options to build prompts
+- Updated `runIteration()` to handle new `buildPrompt()` signature and set both `SystemPrompt` and `Prompt` in `ClaudeRequest`
+- Added error handling for prompt building failures
+
+**Files touched:**
+
+- `internal/loop/controller.go` (modified buildPrompt signature and implementation, updated runIteration)
+- `tasks.yaml` (marked ralph-align-iteration-prompt as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- The prompt builder follows builder pattern with `NewBuilder(opts)` constructor accepting optional size options
+- `BuildSystemPrompt()` returns harness instructions, `BuildUserPrompt()` returns task context - separation keeps concerns clean
+- Git diff stat should only be retrieved when there are actual changes (`HasChanges()` check first) to avoid unnecessary git commands
+- Progress file's `GetCodebasePatterns()` returns `(string, error)` - must handle both return values
+- Default size options (8KB prompt, 2KB patterns, 1KB diff, 2KB failure) provide reasonable truncation limits
+- The system prompt includes crucial directives: implement only this task, run verification, don't commit, update progress.md
+
+**Outcome**: Success - all tests pass, prompt builder fully integrated, generated prompts include all PRD-specified context (task details, acceptance criteria, verification commands, codebase patterns, git status)
+

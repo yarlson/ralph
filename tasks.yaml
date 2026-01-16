@@ -210,7 +210,7 @@ tasks:
       prompt.BuildIterationPrompt. Include system prompt, task details,
       acceptance, verify commands, Codebase Patterns, git diff stat.
       Enforce size limits (default 100KB).
-    status: open
+    status: completed
     acceptance:
       - "Generated prompts include all PRD-specified context"
       - "Size limits enforced; context trimmed if needed"
