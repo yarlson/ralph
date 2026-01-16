@@ -107,10 +107,22 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 
 	// Create Claude runner
 	claudeCommand := "claude"
+	var claudeArgs []string
 	if len(cfg.Claude.Command) > 0 {
 		claudeCommand = cfg.Claude.Command[0]
+		// If command has multiple parts (e.g., ["claude", "code"]),
+		// use the first as command and rest as base args
+		if len(cfg.Claude.Command) > 1 {
+			claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
+		}
 	}
+	// Append configured args
+	claudeArgs = append(claudeArgs, cfg.Claude.Args...)
+
 	claudeRunner := claude.NewSubprocessRunner(claudeCommand, claudeLogsDir)
+	if len(claudeArgs) > 0 {
+		claudeRunner.WithBaseArgs(claudeArgs)
+	}
 
 	// Create verifier
 	ver := verifier.NewCommandRunner(workDir)

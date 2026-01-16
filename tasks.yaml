@@ -57,7 +57,7 @@ tasks:
     description: |
       Build full command array from config.Claude.Command + config.Claude.Args
       in cmd/run.go and internal/claude/exec.go.
-    status: open
+    status: completed
     acceptance:
       - "Config command and args both used in Claude invocation"
       - "Empty args handled correctly"

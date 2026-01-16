@@ -17,6 +17,8 @@ import (
 type SubprocessRunner struct {
 	// command is the path to the Claude binary (e.g., "claude" or "/usr/bin/claude").
 	command string
+	// baseArgs are arguments to prepend before Claude-specific flags (e.g., ["code", "--preset=fast"]).
+	baseArgs []string
 	// logsDir is the directory where raw NDJSON logs are saved.
 	logsDir string
 	// TaskID is an optional task identifier to include in log filenames.
@@ -26,9 +28,17 @@ type SubprocessRunner struct {
 // NewSubprocessRunner creates a new SubprocessRunner with the given command and logs directory.
 func NewSubprocessRunner(command, logsDir string) *SubprocessRunner {
 	return &SubprocessRunner{
-		command: command,
-		logsDir: logsDir,
+		command:  command,
+		baseArgs: []string{},
+		logsDir:  logsDir,
 	}
+}
+
+// WithBaseArgs sets the base arguments to prepend before Claude-specific flags.
+// This allows configuring the runner with args like ["code", "--preset=fast"].
+func (r *SubprocessRunner) WithBaseArgs(baseArgs []string) *SubprocessRunner {
+	r.baseArgs = baseArgs
+	return r
 }
 
 // Run executes Claude Code with the given request and returns the response.
@@ -36,7 +46,7 @@ func NewSubprocessRunner(command, logsDir string) *SubprocessRunner {
 // The context can be used for cancellation/timeout.
 func (r *SubprocessRunner) Run(ctx context.Context, req ClaudeRequest) (*ClaudeResponse, error) {
 	// Build command arguments
-	args := buildArgs(req)
+	args := buildArgs(req, r.baseArgs)
 
 	// Create the command
 	cmd := exec.CommandContext(ctx, r.command, args...)
@@ -134,8 +144,12 @@ func (r *SubprocessRunner) Run(ctx context.Context, req ClaudeRequest) (*ClaudeR
 }
 
 // buildArgs constructs the command-line arguments for the Claude subprocess.
-func buildArgs(req ClaudeRequest) []string {
+// baseArgs are prepended before Claude-specific flags.
+func buildArgs(req ClaudeRequest, baseArgs []string) []string {
 	var args []string
+
+	// Prepend base arguments (e.g., "code", "--preset=fast")
+	args = append(args, baseArgs...)
 
 	// Always use stream-json output format for structured parsing
 	args = append(args, "--output-format=stream-json")

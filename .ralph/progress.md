@@ -1089,3 +1089,33 @@
 - All config loading now goes through `LoadConfigWithFile` which centralizes the logic and ensures consistent behavior across all commands
 
 **Outcome**: Success - all tests pass (11 config tests including 6 new ones), go build succeeds, acceptance criteria met
+
+### 2026-01-16: ralph-align-claude-args (Honor claude.command and claude.args)
+
+**What changed:**
+
+- Modified `internal/claude/exec.go` to support base arguments that are prepended before Claude-specific flags
+- Added `baseArgs []string` field to `SubprocessRunner` struct
+- Implemented `WithBaseArgs(baseArgs []string)` method on `SubprocessRunner` for fluent configuration
+- Modified `buildArgs(req ClaudeRequest, baseArgs []string)` to accept and prepend base arguments
+- Updated `cmd/run.go` to parse both `config.Claude.Command` and `config.Claude.Args`:
+  - If `command` has multiple parts (e.g., `["claude", "code"]`), the first becomes the binary and rest become base args
+  - All elements from `config.Claude.Args` are appended to base args
+- Updated all existing `buildArgs()` test calls to pass empty `[]string{}` for backward compatibility
+- Added 3 new tests: `TestBuildArgs_WithBaseArgs`, `TestBuildArgs_WithBaseArgsAndOtherOptions`, `TestSubprocessRunner_WithBaseArgs`
+
+**Files touched:**
+
+- `internal/claude/exec.go` (modified SubprocessRunner struct, added WithBaseArgs method, modified buildArgs signature)
+- `internal/claude/exec_test.go` (updated 6 existing tests, added 3 new tests)
+- `cmd/run.go` (modified Claude runner creation to use config.Claude.Command and config.Claude.Args)
+
+**Learnings:**
+
+- Using a fluent builder pattern (`WithBaseArgs()`) allows clean configuration without changing the constructor signature
+- Base args must be prepended before Claude-specific flags (`--output-format`, `--system-prompt`, etc.) to maintain correct command structure
+- Config's `command` field can serve dual purpose: first element as binary, rest as base args - clean pattern for commands like `["claude", "code"]`
+- When modifying function signatures in production code, all test callers must be updated - use search/grep to find all call sites
+- Empty slice `[]string{}` as default parameter value maintains backward compatibility for existing tests
+
+**Outcome**: Success - all tests pass (52 claude tests including 3 new ones), acceptance criteria met: config command and args both used, empty args handled correctly, unit tests verify command construction

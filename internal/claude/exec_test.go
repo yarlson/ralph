@@ -16,7 +16,7 @@ func TestBuildArgs_Minimal(t *testing.T) {
 	req := ClaudeRequest{
 		Prompt: "Hello Claude",
 	}
-	args := buildArgs(req)
+	args := buildArgs(req, []string{})
 
 	assert.Contains(t, args, "--output-format=stream-json")
 	assert.Contains(t, args, "-p")
@@ -32,7 +32,7 @@ func TestBuildArgs_WithSystemPrompt(t *testing.T) {
 		Prompt:       "Hello",
 		SystemPrompt: "You are a helpful assistant",
 	}
-	args := buildArgs(req)
+	args := buildArgs(req, []string{})
 
 	assert.Contains(t, args, "--system-prompt")
 	spIndex := indexOf(args, "--system-prompt")
@@ -46,7 +46,7 @@ func TestBuildArgs_WithAllowedTools(t *testing.T) {
 		Prompt:       "Hello",
 		AllowedTools: []string{"Read", "Edit", "Bash"},
 	}
-	args := buildArgs(req)
+	args := buildArgs(req, []string{})
 
 	assert.Contains(t, args, "--allowedTools")
 	atIndex := indexOf(args, "--allowedTools")
@@ -60,7 +60,7 @@ func TestBuildArgs_WithContinue(t *testing.T) {
 		Prompt:   "Continue from here",
 		Continue: true,
 	}
-	args := buildArgs(req)
+	args := buildArgs(req, []string{})
 
 	assert.Contains(t, args, "--continue")
 }
@@ -70,7 +70,7 @@ func TestBuildArgs_WithExtraArgs(t *testing.T) {
 		Prompt:    "Hello",
 		ExtraArgs: []string{"--verbose", "--debug"},
 	}
-	args := buildArgs(req)
+	args := buildArgs(req, []string{})
 
 	assert.Contains(t, args, "--verbose")
 	assert.Contains(t, args, "--debug")
@@ -84,7 +84,7 @@ func TestBuildArgs_AllOptions(t *testing.T) {
 		Continue:     true,
 		ExtraArgs:    []string{"--max-tokens", "1000"},
 	}
-	args := buildArgs(req)
+	args := buildArgs(req, []string{})
 
 	assert.Contains(t, args, "--output-format=stream-json")
 	assert.Contains(t, args, "--system-prompt")
@@ -92,6 +92,46 @@ func TestBuildArgs_AllOptions(t *testing.T) {
 	assert.Contains(t, args, "--continue")
 	assert.Contains(t, args, "-p")
 	assert.Contains(t, args, "--max-tokens")
+}
+
+func TestBuildArgs_WithBaseArgs(t *testing.T) {
+	req := ClaudeRequest{
+		Prompt: "Hello",
+	}
+	baseArgs := []string{"code", "--preset=fast"}
+	args := buildArgs(req, baseArgs)
+
+	// Base args should come first
+	assert.Equal(t, "code", args[0])
+	assert.Equal(t, "--preset=fast", args[1])
+	// Then Claude-specific args
+	assert.Contains(t, args, "--output-format=stream-json")
+}
+
+func TestBuildArgs_WithBaseArgsAndOtherOptions(t *testing.T) {
+	req := ClaudeRequest{
+		Prompt:       "Do the task",
+		SystemPrompt: "Be helpful",
+		ExtraArgs:    []string{"--verbose"},
+	}
+	baseArgs := []string{"code"}
+	args := buildArgs(req, baseArgs)
+
+	// Base args should come first
+	assert.Equal(t, "code", args[0])
+	// Then Claude-specific args
+	assert.Contains(t, args, "--output-format=stream-json")
+	assert.Contains(t, args, "--system-prompt")
+	assert.Contains(t, args, "--verbose")
+}
+
+func TestSubprocessRunner_WithBaseArgs(t *testing.T) {
+	logsDir := t.TempDir()
+	runner := NewSubprocessRunner("claude", logsDir)
+
+	runner.WithBaseArgs([]string{"code", "--preset=fast"})
+
+	assert.Equal(t, []string{"code", "--preset=fast"}, runner.baseArgs)
 }
 
 func TestGenerateLogFilename(t *testing.T) {
