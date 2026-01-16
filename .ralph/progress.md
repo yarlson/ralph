@@ -247,3 +247,26 @@
 - TDD approach: wrote 10 tests first covering struct defaults, all fields, JSON serialization, and interface implementation via mock
 
 **Outcome**: Success - all 10 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: claude-runner-ndjson-parser (NDJSON Stream Parser)
+
+**What changed:**
+- Implemented NDJSON parser in `internal/claude/parser.go` for Claude Code's stream-json output
+- Created `ParseResult` struct to hold extracted data: SessionID, Model, Version, Cwd, FinalText, StreamText, Usage, TotalCostUSD, DurationMS, NumTurns, IsError, PermissionDenials, ParseErrors
+- Created internal event structs for parsing: `baseEvent`, `initEvent`, `assistantEvent`, `contentBlock`, `usageBlock`, `resultEvent`
+- `ParseNDJSON(io.Reader)` function parses line-by-line with configurable scanner buffer (64KB initial, 10MB max)
+- Handles event types: system/init, assistant/message, result/success, result/error
+- Gracefully handles parse errors - continues parsing and records errors, fails only if no terminal result
+
+**Files touched:**
+- `internal/claude/parser.go` (new)
+- `internal/claude/parser_test.go` (new)
+
+**Learnings:**
+- Use `bufio.Scanner.Buffer()` to configure scanner for large lines - default token limit is too small for large JSON
+- Parse each line independently into `baseEvent` first to determine type, then unmarshal into specific struct
+- Accumulate text from assistant/message content blocks using `strings.Builder` for efficiency
+- Record parse errors in result rather than failing immediately - allows degraded parsing when possible
+- TDD approach: wrote 19 tests covering empty input, system/init, assistant messages, result success/error, permission denials, malformed lines, large lines, and edge cases
+
+**Outcome**: Success - all 29 claude tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

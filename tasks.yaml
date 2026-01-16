@@ -396,7 +396,7 @@ tasks:
       - Extract final result, usage, cost from result event
       - Handle large lines (configure scanner buffer)
       - Continue on parse errors, fail only if no terminal result
-    status: open
+    status: completed
     acceptance:
       - "Parser handles all event types from CLAUDE-CODE.md"
       - "Large line handling (10MB buffer)"
