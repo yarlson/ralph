@@ -832,3 +832,29 @@
 - TDD approach: wrote 20 tests first covering command structure, flags, error cases, state transitions, and feedback/reason file persistence
 
 **Outcome**: Success - all cmd tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: cli-report (ralph report Command)
+
+**What changed:**
+- Implemented `ralph report` command in `cmd/report.go`
+- Added `--output, -o` flag to write report to a file instead of stdout
+- Uses `reporter.ReportGenerator` to generate the feature report
+- Uses `reporter.FormatReport` to format the report for display
+- Creates output directory if it doesn't exist when writing to file
+- Displays success message with file path when writing to file
+- Removed stub `newReportCmd` from `cmd/root.go` (all CLI commands now implemented)
+
+**Files touched:**
+- `cmd/report.go` (new)
+- `cmd/report_test.go` (new)
+- `cmd/root.go` (removed stub newReportCmd, cleaned up unused imports)
+- `cmd/root_test.go` (removed stub commands test section)
+
+**Learnings:**
+- Follow same pattern as init/run/status commands: load config, read parent-task-id, validate parent task exists
+- Reuse existing `reporter.ReportGenerator` and `reporter.FormatReport` for consistent report generation
+- When writing to file, use `os.MkdirAll` on the directory path to ensure parent directories exist
+- Tasks require `CreatedAt` and `UpdatedAt` fields in tests - add `time.Now()` to test fixtures
+- TDD approach: wrote 10 tests first covering command structure, flags, error cases, report display, blocked tasks, iteration stats, file output, directory creation, and empty reports
+
+**Outcome**: Success - all tests pass, `go build ./...` and `go test ./...` succeed

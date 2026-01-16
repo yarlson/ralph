@@ -50,24 +50,4 @@ func TestRootCommand(t *testing.T) {
 	})
 }
 
-func TestSubcommands(t *testing.T) {
-	// Commands that are still stubs (not yet implemented)
-	stubCommands := []string{
-		"report",
-	}
-
-	for _, name := range stubCommands {
-		t.Run(name+" returns not implemented", func(t *testing.T) {
-			cmd := NewRootCmd()
-			var buf bytes.Buffer
-			cmd.SetOut(&buf)
-			cmd.SetErr(&buf)
-			cmd.SetArgs([]string{name})
-
-			err := cmd.Execute()
-			// Stub commands return an error with "not implemented"
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "not implemented")
-		})
-	}
-}
+// Note: All commands have been implemented. No stub commands remaining.

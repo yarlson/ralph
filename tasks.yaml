@@ -1021,7 +1021,7 @@ tasks:
       - Generates and displays feature report
       - Optional --output <file> to write report
       - Formats for terminal or file output
-    status: open
+    status: completed
     acceptance:
       - "Report displayed correctly"
       - "--output writes to file"

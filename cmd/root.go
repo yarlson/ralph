@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"errors"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -45,16 +43,3 @@ func Execute() {
 	}
 }
 
-// errNotImplemented is returned by stub commands
-var errNotImplemented = errors.New("not implemented")
-
-func newReportCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "report",
-		Short: "Generate feature report",
-		Long:  "Generate an end-of-feature summary with commits, tasks, and statistics.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("report: %w", errNotImplemented)
-		},
-	}
-}
