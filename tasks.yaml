@@ -175,7 +175,7 @@ tasks:
       - CreatedAt, UpdatedAt (time.Time)
 
       Include JSON tags and validation methods.
-    status: open
+    status: completed
     acceptance:
       - "Task struct with all required fields"
       - "TaskStatus type with valid values"

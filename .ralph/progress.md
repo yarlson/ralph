@@ -78,3 +78,25 @@
 - Use `t.TempDir()` for filesystem tests - it auto-cleans up
 
 **Outcome**: Success - all 6 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: task-store-model (Task Model Definition)
+
+**What changed:**
+- Created `internal/taskstore` package with Task model and TaskStatus type
+- Implemented `Task` struct with all required fields: ID, Title, Description, ParentID (*string), DependsOn, Status, Acceptance, Verify, Labels, CreatedAt, UpdatedAt
+- Implemented `TaskStatus` type as string enum with values: open, in_progress, completed, blocked, failed, skipped
+- Added `IsValid()` method on TaskStatus for validation
+- Added `Validate()` method on Task that checks required fields and valid status
+- Full JSON serialization support with appropriate tags and omitempty for optional fields
+
+**Files touched:**
+- `internal/taskstore/model.go` (new)
+- `internal/taskstore/model_test.go` (new)
+
+**Learnings:**
+- Use `*string` for optional parent ID to distinguish "no parent" (nil) from empty string
+- Using a map for status validation (`validStatuses`) provides O(1) lookup for `IsValid()`
+- JSON tags with `omitempty` keep serialized output clean for optional fields
+- TDD approach: wrote 13 tests first covering status validity, JSON serialization, and all validation error cases
+
+**Outcome**: Success - all 13 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
