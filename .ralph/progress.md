@@ -407,3 +407,29 @@
 - TDD approach: wrote 14 tests first covering interface implementation via mock, all method behaviors, error types, and error wrapping
 
 **Outcome**: Success - all 14 git tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: git-manager-shell (Git Shell Implementation)
+
+**What changed:**
+- Implemented `ShellManager` struct in `internal/git/shell.go` that implements the `Manager` interface
+- `NewShellManager(workDir, branchPrefix)` constructor creates manager with configurable working directory and branch prefix
+- Implemented `runGit(ctx, args...)` helper method that shells out to git binary with proper error handling
+- All 7 interface methods implemented: `GetCurrentBranch`, `GetCurrentCommit`, `HasChanges`, `GetDiffStat`, `GetChangedFiles`, `Commit`, `EnsureBranch`
+- Uses `exec.CommandContext` for context-aware subprocess execution with automatic cancellation
+- Case-insensitive "not a git repository" detection to handle varying git versions
+- Branch operations use configured prefix (e.g., "ralph/") prepended to branch names
+- `Commit` method stages all changes with `git add -A` before committing
+
+**Files touched:**
+- `internal/git/shell.go` (new)
+- `internal/git/shell_test.go` (new)
+
+**Learnings:**
+- Test setup for git operations requires disabling GPG signing (`git config commit.gpgsign false`) when system has signing configured
+- Use `git init -b main` to ensure consistent default branch name across different git configurations
+- `git diff --stat` outputs "warning: Not a git repository" (capital N) vs other commands that use lowercase - need case-insensitive matching
+- `git status --porcelain` format uses first 2 characters for status codes, followed by space, then filename
+- Renamed files in porcelain format show as "old -> new" and need special parsing
+- TDD approach: wrote 26 integration tests covering all interface methods, context cancellation/timeout, non-git-repo errors, and edge cases
+
+**Outcome**: Success - all 40 git tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
