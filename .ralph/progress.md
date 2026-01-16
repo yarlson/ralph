@@ -1185,3 +1185,32 @@
 - Follow the CLI pattern from other commands: use `cmd.OutOrStdout()` for output to enable test capture
 
 **Outcome**: Success - all tests pass, all acceptance criteria met: lists all iterations, shows specific iteration details, clear error on missing iteration, formatted for readability
+
+### 2026-01-16: ralph-align-pause-check (Fix ralph pause Checking)
+
+**What changed:**
+
+- Added `WorkDir` field to `ControllerDeps` and `Controller` structs to enable pause state checking
+- Implemented `checkPaused()` method in `Controller` that reads the pause flag file using `state.IsPaused()`
+- Added pause check in main `RunLoop()` method before selecting next task (after context check, before budget check)
+- Updated `cmd/run.go` to pass `workDir` to controller dependencies
+- Loop now checks pause state between iterations and returns `RunOutcomePaused` with appropriate message
+- Added comprehensive test `TestController_RunLoop_ChecksPauseBetweenIterations` that verifies pause detection between iterations
+
+**Files touched:**
+
+- `internal/loop/controller.go` (added WorkDir field, checkPaused method, pause check in loop)
+- `internal/loop/controller_test.go` (added mockClaudeRunnerWithCallback, new test)
+- `cmd/run.go` (updated ControllerDeps to include WorkDir)
+- `tasks.yaml` (marked ralph-align-pause-check as completed)
+
+**Learnings:**
+
+- The pause check must occur **in the loop** itself, not just at the start of the run command, to enable mid-execution pausing
+- Pause check should be positioned after context cancellation check but before budget/gutter checks for proper priority
+- Controller needs access to `workDir` to call `state.IsPaused()` - this required adding WorkDir to both ControllerDeps and Controller structs
+- When testing behavior that requires callback during execution, create a custom mock with callback function support
+- The pause flag file pattern (file presence = paused) is simple and atomic - no parsing needed
+
+**Outcome**: Success - all tests pass, acceptance criteria met: pause flag checked between iterations, loop stops after current iteration when paused, appropriate message shown
+

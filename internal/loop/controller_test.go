@@ -13,6 +13,7 @@ import (
 	"github.com/yarlson/go-ralph/internal/git"
 	"github.com/yarlson/go-ralph/internal/memory"
 	"github.com/yarlson/go-ralph/internal/selector"
+	"github.com/yarlson/go-ralph/internal/state"
 	"github.com/yarlson/go-ralph/internal/taskstore"
 	"github.com/yarlson/go-ralph/internal/verifier"
 )
@@ -966,4 +967,89 @@ func TestBuildGraph_ForSelector(t *testing.T) {
 	graph, err := selector.BuildGraph(tasks)
 	require.NoError(t, err)
 	assert.NotNil(t, graph)
+}
+
+// mockClaudeRunnerWithCallback is a custom Claude runner that calls a callback function.
+type mockClaudeRunnerWithCallback struct {
+	callbackFn func() error
+}
+
+func (m *mockClaudeRunnerWithCallback) Run(ctx context.Context, req claude.ClaudeRequest) (*claude.ClaudeResponse, error) {
+	if m.callbackFn != nil {
+		if err := m.callbackFn(); err != nil {
+			return nil, err
+		}
+	}
+	return &claude.ClaudeResponse{
+		SessionID:    "sess-123",
+		FinalText:    "Done",
+		TotalCostUSD: 0.01,
+	}, nil
+}
+
+func TestController_RunLoop_ChecksPauseBetweenIterations(t *testing.T) {
+	// Create a temp dir for .ralph state
+	workDir := t.TempDir()
+	require.NoError(t, state.EnsureRalphDir(workDir))
+
+	store := newMockTaskStore()
+
+	parent := newTestTask("parent", "Parent", taskstore.StatusOpen, nil)
+	store.addTask(parent)
+
+	// Create two child tasks
+	child1 := newTestTask("child1", "Child 1", taskstore.StatusOpen, strPtr("parent"))
+	child1.CreatedAt = time.Now().Add(-2 * time.Hour)
+	store.addTask(child1)
+
+	child2 := newTestTask("child2", "Child 2", taskstore.StatusOpen, strPtr("parent"))
+	child2.CreatedAt = time.Now().Add(-1 * time.Hour)
+	store.addTask(child2)
+
+	// Mock that sets pause flag after first call
+	iterationCount := 0
+	claudeRunner := &mockClaudeRunnerWithCallback{
+		callbackFn: func() error {
+			iterationCount++
+			if iterationCount == 1 {
+				// After first iteration completes, set pause flag
+				return state.SetPaused(workDir, true)
+			}
+			return nil
+		},
+	}
+
+	verifierMock := &mockVerifier{
+		results: []verifier.VerificationResult{{Passed: true, Command: []string{"echo"}}},
+	}
+
+	gitMock := &mockGitManager{
+		currentCommit: "abc123",
+		hasChanges:    true,
+		changedFiles:  []string{"file1.go"},
+		commitHash:    "def456",
+	}
+
+	deps := ControllerDeps{
+		TaskStore:   store,
+		Claude:      claudeRunner,
+		Verifier:    verifierMock,
+		Git:         gitMock,
+		LogsDir:     t.TempDir(),
+		ProgressDir: t.TempDir(),
+		WorkDir:     workDir,
+	}
+
+	ctrl := NewController(deps)
+	result := ctrl.RunLoop(context.Background(), "parent")
+
+	// Should have paused after first iteration
+	assert.Equal(t, RunOutcomePaused, result.Outcome)
+	assert.Contains(t, result.Message, "paused")
+	assert.Equal(t, 1, result.IterationsRun)
+	assert.Len(t, result.CompletedTasks, 1)
+	assert.Equal(t, "child1", result.CompletedTasks[0])
+
+	// child2 should still be open
+	assert.Equal(t, taskstore.StatusOpen, store.tasks["child2"].Status)
 }

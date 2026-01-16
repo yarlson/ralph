@@ -112,7 +112,7 @@ tasks:
     description: |
       Modify internal/loop/controller.go to check pause flag in main loop
       before selecting next task, not just at start of run.
-    status: open
+    status: completed
     acceptance:
       - "Running ralph pause in another terminal stops loop after current iteration"
       - "Status message shows paused state"

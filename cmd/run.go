@@ -142,6 +142,7 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 		LogsDir:      logsDir,
 		ProgressDir:  filepath.Dir(progressPath),
 		ProgressFile: progressFile,
+		WorkDir:      workDir,
 	}
 
 	// Create controller

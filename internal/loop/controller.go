@@ -9,6 +9,7 @@ import (
 	"github.com/yarlson/go-ralph/internal/git"
 	"github.com/yarlson/go-ralph/internal/memory"
 	"github.com/yarlson/go-ralph/internal/selector"
+	"github.com/yarlson/go-ralph/internal/state"
 	"github.com/yarlson/go-ralph/internal/taskstore"
 	"github.com/yarlson/go-ralph/internal/verifier"
 )
@@ -94,6 +95,7 @@ type ControllerDeps struct {
 	LogsDir      string
 	ProgressDir  string
 	ProgressFile *memory.ProgressFile
+	WorkDir      string
 }
 
 // Controller orchestrates the main iteration loop.
@@ -105,6 +107,7 @@ type Controller struct {
 	logsDir      string
 	progressDir  string
 	progressFile *memory.ProgressFile
+	workDir      string
 
 	budget *BudgetTracker
 	gutter *GutterDetector
@@ -124,6 +127,7 @@ func NewController(deps ControllerDeps) *Controller {
 		logsDir:      deps.LogsDir,
 		progressDir:  deps.ProgressDir,
 		progressFile: deps.ProgressFile,
+		workDir:      deps.WorkDir,
 		budget:       NewBudgetTracker(DefaultBudgetLimits()),
 		gutter:       NewGutterDetector(DefaultGutterConfig()),
 		maxRetries:   2, // default
@@ -146,6 +150,18 @@ func (c *Controller) SetMaxRetries(maxRetries int) {
 	c.maxRetries = maxRetries
 }
 
+// checkPaused checks if the loop has been paused by reading the pause flag file.
+func (c *Controller) checkPaused() bool {
+	if c.workDir == "" {
+		return false
+	}
+	paused, err := state.IsPaused(c.workDir)
+	if err != nil {
+		return false
+	}
+	return paused
+}
+
 // RunLoop executes the main iteration loop until completion, blocked, or budget exceeded.
 func (c *Controller) RunLoop(ctx context.Context, parentTaskID string) RunResult {
 	startTime := time.Now()
@@ -164,6 +180,14 @@ func (c *Controller) RunLoop(ctx context.Context, parentTaskID string) RunResult
 			result.ElapsedTime = time.Since(startTime)
 			return result
 		default:
+		}
+
+		// Check if loop has been paused
+		if c.checkPaused() {
+			result.Outcome = RunOutcomePaused
+			result.Message = "loop paused (use 'ralph resume' to continue)"
+			result.ElapsedTime = time.Since(startTime)
+			return result
 		}
 
 		// Check budget before iteration
