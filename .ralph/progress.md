@@ -1807,3 +1807,34 @@
 - Adding AGENTS.md guidance to system prompt (rule 6) and including existing content helps Claude understand when and how to use AGENTS.md files
 
 **Outcome**: Success - all tests pass, `go build ./...` and `go test ./...` succeed
+
+### 2026-01-16: ralph-align-retry-feedback (Add Retry Feedback Support)
+
+**What changed:**
+
+- Modified `internal/loop/controller.go` to clear feedback file after successful iteration completion (line 707-710)
+- Added `NextTaskFeedback` field to `Status` struct in `internal/reporter/status.go` to track user feedback for next task
+- Added `stateDir` field to `StatusGenerator` struct and created `NewStatusGeneratorWithStateDir` constructor
+- Updated `StatusGenerator.GetStatus()` to read feedback file from `.ralph/state/feedback-{taskID}.txt` when next task is selected
+- Modified `FormatStatus()` to display feedback in status output when present
+- Updated `cmd/status.go` to use `NewStatusGeneratorWithStateDir` and pass state directory path
+- Added comprehensive tests for feedback display in status and feedback clearing after completion
+
+**Files touched:**
+
+- `internal/loop/controller.go` (added feedback file cleanup on success)
+- `internal/reporter/status.go` (added NextTaskFeedback field, state dir support, feedback reading)
+- `internal/reporter/status_test.go` (added tests for feedback display)
+- `cmd/status.go` (updated to pass state directory)
+- `tasks.yaml` (marked ralph-align-retry-feedback as completed)
+
+**Learnings:**
+
+- Feedback files are stored as `.ralph/state/feedback-{taskID}.txt` per the existing retry command implementation
+- Feedback should be cleared on successful task completion to prevent stale feedback from affecting future iterations
+- Using `os.Remove` and ignoring errors is idiomatic for cleanup operations where file may not exist
+- Adding optional state directory to status generator maintains backward compatibility with existing code
+- Feedback display in status output helps users verify their feedback was captured correctly
+- The retry command already had --feedback flag and storage implemented; this task completed the feedback loop by adding clearing and display
+
+**Outcome**: Success - all tests pass (go test ./...), cmd tests pass, loop tests pass, reporter tests pass

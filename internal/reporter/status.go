@@ -68,12 +68,16 @@ type Status struct {
 
 	// LastIteration contains info about the most recent iteration (if any).
 	LastIteration *LastIterationInfo
+
+	// NextTaskFeedback is the user feedback for the next task (if any).
+	NextTaskFeedback string
 }
 
 // StatusGenerator generates status information for a parent task.
 type StatusGenerator struct {
 	taskStore taskstore.Store
 	logsDir   string
+	stateDir  string
 }
 
 // NewStatusGenerator creates a new status generator.
@@ -81,6 +85,15 @@ func NewStatusGenerator(store taskstore.Store, logsDir string) *StatusGenerator 
 	return &StatusGenerator{
 		taskStore: store,
 		logsDir:   logsDir,
+	}
+}
+
+// NewStatusGeneratorWithStateDir creates a new status generator with state directory.
+func NewStatusGeneratorWithStateDir(store taskstore.Store, logsDir, stateDir string) *StatusGenerator {
+	return &StatusGenerator{
+		taskStore: store,
+		logsDir:   logsDir,
+		stateDir:  stateDir,
 	}
 }
 
@@ -138,6 +151,14 @@ func (g *StatusGenerator) GetStatus(parentTaskID string) (*Status, error) {
 
 		// Get next task
 		status.NextTask = selector.SelectNext(tasks, graph, parentTaskID, nil)
+
+		// Load feedback for next task if available
+		if status.NextTask != nil && g.stateDir != "" {
+			feedbackPath := filepath.Join(g.stateDir, fmt.Sprintf("feedback-%s.txt", status.NextTask.ID))
+			if feedbackBytes, err := os.ReadFile(feedbackPath); err == nil {
+				status.NextTaskFeedback = string(feedbackBytes)
+			}
+		}
 	}
 
 	// Load last iteration info
@@ -228,6 +249,9 @@ func FormatStatus(status *Status) string {
 	sb.WriteString("### Next Task\n")
 	if status.NextTask != nil {
 		_, _ = fmt.Fprintf(&sb, "Next Task: %s (%s)\n", status.NextTask.ID, status.NextTask.Title)
+		if status.NextTaskFeedback != "" {
+			_, _ = fmt.Fprintf(&sb, "Feedback: %s\n", status.NextTaskFeedback)
+		}
 	} else {
 		sb.WriteString("Next Task: none\n")
 	}

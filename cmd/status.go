@@ -61,11 +61,12 @@ func runStatus(cmd *cobra.Command) error {
 		return fmt.Errorf("parent task %q not found: %w", parentTaskID, err)
 	}
 
-	// Ensure logs directory exists
+	// Get logs and state directories
 	logsDir := state.LogsDirPath(workDir)
+	stateDir := state.StateDirPath(workDir)
 
 	// Create status generator
-	generator := reporter.NewStatusGenerator(store, logsDir)
+	generator := reporter.NewStatusGeneratorWithStateDir(store, logsDir, stateDir)
 
 	// Get status
 	status, err := generator.GetStatus(parentTaskID)

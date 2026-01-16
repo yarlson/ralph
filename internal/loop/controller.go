@@ -703,6 +703,12 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusCompleted)
 	delete(c.taskAttempts, task.ID) // Clear attempt count on success
 
+	// Clear feedback file on success
+	if c.workDir != "" {
+		feedbackPath := filepath.Join(state.StateDirPath(c.workDir), fmt.Sprintf("feedback-%s.txt", task.ID))
+		_ = os.Remove(feedbackPath) // Ignore error if file doesn't exist
+	}
+
 	// Update progress file
 	if c.progressFile != nil {
 		entry := memory.IterationEntry{

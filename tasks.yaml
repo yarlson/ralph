@@ -528,7 +528,7 @@ tasks:
       Add --feedback flag to cmd/retry.go to store user feedback.
       Modify internal/loop/controller.go to read feedback and pass to retry prompt.
       Create .ralph/state/retry-feedback.json state file.
-    status: open
+    status: completed
     acceptance:
       - "ralph retry --task X --feedback 'message' stores feedback"
       - "Next iteration includes feedback in retry prompt"

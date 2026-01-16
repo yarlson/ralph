@@ -1,6 +1,7 @@
 package reporter
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -431,6 +432,21 @@ func TestStatusGenerator_Format(t *testing.T) {
 		assert.Contains(t, formatted, "Parent: parent-1")
 		assert.Contains(t, formatted, "Total: 0")
 	})
+
+	t.Run("formats status with next task feedback", func(t *testing.T) {
+		nextTask := &taskstore.Task{ID: "task-2", Title: "Next Task"}
+		status := &Status{
+			ParentTaskID:     "parent-1",
+			Counts:           TaskCounts{Total: 3, Completed: 1},
+			NextTask:         nextTask,
+			NextTaskFeedback: "Try a different approach",
+		}
+
+		formatted := FormatStatus(status)
+
+		assert.Contains(t, formatted, "Next Task: task-2")
+		assert.Contains(t, formatted, "Feedback: Try a different approach")
+	})
 }
 
 func TestFindLatestIterationRecord(t *testing.T) {
@@ -468,6 +484,70 @@ func TestFindLatestIterationRecord(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, found)
 		assert.Equal(t, "", path)
+	})
+}
+
+func TestStatusGenerator_GetStatus_WithFeedback(t *testing.T) {
+	t.Run("loads feedback for next task", func(t *testing.T) {
+		stateDir := t.TempDir()
+
+		// Create feedback file for task-2
+		feedbackPath := filepath.Join(stateDir, "feedback-task-2.txt")
+		err := os.WriteFile(feedbackPath, []byte("Try approach X"), 0644)
+		require.NoError(t, err)
+
+		parentID := "parent-1"
+		store := &mockTaskStore{
+			tasks: []*taskstore.Task{
+				{ID: "parent-1", Title: "Parent", Status: taskstore.StatusOpen, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+				{ID: "task-1", Title: "Task 1", Status: taskstore.StatusCompleted, ParentID: &parentID, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+				{ID: "task-2", Title: "Task 2", Status: taskstore.StatusOpen, ParentID: &parentID, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			},
+		}
+		gen := NewStatusGeneratorWithStateDir(store, "", stateDir)
+
+		status, err := gen.GetStatus("parent-1")
+		require.NoError(t, err)
+
+		assert.NotNil(t, status.NextTask)
+		assert.Equal(t, "task-2", status.NextTask.ID)
+		assert.Equal(t, "Try approach X", status.NextTaskFeedback)
+	})
+
+	t.Run("handles missing feedback file gracefully", func(t *testing.T) {
+		stateDir := t.TempDir()
+
+		parentID := "parent-1"
+		store := &mockTaskStore{
+			tasks: []*taskstore.Task{
+				{ID: "parent-1", Title: "Parent", Status: taskstore.StatusOpen, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+				{ID: "task-1", Title: "Task 1", Status: taskstore.StatusOpen, ParentID: &parentID, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			},
+		}
+		gen := NewStatusGeneratorWithStateDir(store, "", stateDir)
+
+		status, err := gen.GetStatus("parent-1")
+		require.NoError(t, err)
+
+		assert.NotNil(t, status.NextTask)
+		assert.Equal(t, "", status.NextTaskFeedback)
+	})
+
+	t.Run("no feedback when no state dir", func(t *testing.T) {
+		parentID := "parent-1"
+		store := &mockTaskStore{
+			tasks: []*taskstore.Task{
+				{ID: "parent-1", Title: "Parent", Status: taskstore.StatusOpen, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+				{ID: "task-1", Title: "Task 1", Status: taskstore.StatusOpen, ParentID: &parentID, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			},
+		}
+		gen := NewStatusGenerator(store, "")
+
+		status, err := gen.GetStatus("parent-1")
+		require.NoError(t, err)
+
+		assert.NotNil(t, status.NextTask)
+		assert.Equal(t, "", status.NextTaskFeedback)
 	})
 }
 
