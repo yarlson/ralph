@@ -220,7 +220,7 @@ tasks:
       - Uses file locking for concurrent access safety
       - Atomic writes (write to temp, rename)
       - Loads all tasks on List() by scanning directory
-    status: open
+    status: completed
     acceptance:
       - "LocalTaskStore implements TaskStore interface"
       - "Tasks persisted as individual JSON files"
@@ -241,7 +241,7 @@ tasks:
       Implement ImportFromYAML function to load tasks from a YAML file
       (like this tasks.yaml) into the local task store.
       Support bulk import for initial task seeding.
-    status: open
+    status: completed
     acceptance:
       - "ImportFromYAML reads YAML task definitions"
       - "Validates all tasks before importing"

@@ -119,3 +119,47 @@
 - Interface naming: using `Store` instead of `TaskStore` since the package is already `taskstore`, avoiding stutter (`taskstore.TaskStore` vs `taskstore.Store`)
 
 **Outcome**: Success - all 16 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: task-store-local (Local File Store Implementation)
+
+**What changed:**
+- Implemented `LocalStore` struct in `internal/taskstore/local.go` that implements the `Store` interface
+- Tasks persisted as individual JSON files in configured directory (`.ralph/tasks/{id}.json`)
+- Atomic writes using temp file + rename pattern to prevent corruption
+- Concurrent access safety using `sync.RWMutex` (read lock for Get/List, write lock for Save/Update/Delete)
+- `NewLocalStore(dir)` constructor creates directory if not exists
+
+**Files touched:**
+- `internal/taskstore/local.go` (new)
+- `internal/taskstore/local_test.go` (new)
+
+**Learnings:**
+- Use `sync.RWMutex` with `RLock()` for reads and `Lock()` for writes to allow concurrent reads
+- Internal `getUnlocked()` helper allows code reuse when caller already holds a lock (e.g., `UpdateStatus` calls it after acquiring write lock)
+- Atomic write pattern: write to `.tmp` file, then `os.Rename()` - rename is atomic on POSIX systems
+- When cleanup code can't meaningfully handle errors (like removing temp file after rename failed), use explicit ignore: `_ = os.Remove(tmpFile)`
+
+**Outcome**: Success - all 37 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: task-store-yaml-import (YAML Task Import)
+
+**What changed:**
+- Implemented `ImportFromYAML(store, path)` function in `internal/taskstore/yaml.go`
+- Created `YAMLTask` and `YAMLFile` structs for YAML parsing with appropriate tags
+- Created `ImportResult` and `ImportError` types to report import results
+- Function validates all tasks before importing, reports errors with task IDs
+- Defaults status to "open" if not specified in YAML
+- Updates existing tasks if task ID already exists in store
+- Converts YAML field names (parentId) to internal model (*string ParentID)
+
+**Files touched:**
+- `internal/taskstore/yaml.go` (new)
+- `internal/taskstore/yaml_test.go` (new)
+
+**Learnings:**
+- Use `gopkg.in/yaml.v3` directly for YAML parsing (simpler than Viper for this use case)
+- YAML struct tags use camelCase field names (parentId, dependsOn) to match tasks.yaml format
+- Separate YAML struct from internal model allows for field name translation and default application
+- TDD approach: wrote 9 comprehensive tests covering valid imports, defaults, validation errors, file errors, empty files, updates, and complex dependencies
+
+**Outcome**: Success - all 46 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
