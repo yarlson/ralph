@@ -163,7 +163,7 @@ while :; do
         select(.type=="assistant")
         | .message.content[]?
         | select(.type=="text")
-        | .text
+        | .text, ""
       ' | format_markdown
 
 	rc="${PIPESTATUS[0]}"

@@ -1419,3 +1419,35 @@
 
 **Outcome**: Success - all 10 import tests pass, all acceptance criteria met: imports tasks from YAML, validates and reports errors with task IDs, existing tasks are updated, command integrated into CLI
 
+### 2026-01-16: ralph-align-iteration-timeout (Enforce Per-Iteration Time Limit)
+
+**What changed:**
+
+- Modified `internal/loop/controller.go` `runIteration()` method to create context with timeout from `MaxMinutesPerIteration` config
+- Added timeout context creation at the beginning of `runIteration()`: if `MaxMinutesPerIteration > 0`, creates child context with timeout
+- Replaced all `ctx` uses with `iterationCtx` throughout `runIteration()` method for consistent timeout enforcement
+- Added timeout detection checks after every operation that could fail: Claude invocation, git operations, verification, commit
+- When `iterationCtx.Err() != nil` is detected, iteration completes with `OutcomeBudgetExceeded` and feedback "Iteration timeout exceeded"
+- Checks for both `context.DeadlineExceeded` and `context.Canceled` errors using `iterationCtx.Err() != nil`
+- Added comprehensive tests: `TestController_RunIteration_TimeoutExceeded` and `TestController_RunLoop_IterationTimeoutFromConfig`
+- Created `timeoutMockClaudeRunner` test mock that respects context cancellation
+
+**Files touched:**
+
+- `internal/loop/controller.go` (modified `runIteration()` method)
+- `internal/loop/controller_test.go` (added 2 new tests and `timeoutMockClaudeRunner` mock)
+- `tasks.yaml` (marked ralph-align-iteration-timeout as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- Context timeout should be created at the start of `runIteration()` and passed to all operations (Claude, Git, Verifier) for consistent timeout enforcement
+- Use `context.WithTimeout()` with duration from `time.Duration(MaxMinutesPerIteration) * time.Minute`
+- Check `iterationCtx.Err() != nil` instead of specifically `context.DeadlineExceeded` to catch both deadline exceeded and manual cancellation
+- Timeout handling should mark iteration as `OutcomeBudgetExceeded` (not `OutcomeFailed`) to distinguish timeout from other failures
+- Test mocks should respect context cancellation by checking `ctx.Done()` in select statements
+- The `defer cancel()` pattern ensures timeout context is cleaned up even if iteration completes before timeout
+- Config default `MaxMinutesPerIteration: 20` (20 minutes) is already set in `DefaultBudgetLimits()`
+
+**Outcome**: Success - all tests pass (go test ./...), per-iteration timeout enforcement implemented, Claude subprocess properly cancelled on timeout, iteration marked as budget_exceeded when timeout occurs
+

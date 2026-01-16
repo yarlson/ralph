@@ -383,8 +383,17 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	c.taskAttempts[task.ID]++
 	record.AttemptNumber = c.taskAttempts[task.ID]
 
+	// Create context with per-iteration timeout if configured
+	iterationCtx := ctx
+	var cancel context.CancelFunc
+	if c.budget.limits.MaxMinutesPerIteration > 0 {
+		timeout := time.Duration(c.budget.limits.MaxMinutesPerIteration) * time.Minute
+		iterationCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	// Get base commit
-	baseCommit, err := c.gitManager.GetCurrentCommit(ctx)
+	baseCommit, err := c.gitManager.GetCurrentCommit(iterationCtx)
 	if err == nil {
 		record.BaseCommit = baseCommit
 	}
@@ -393,8 +402,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusInProgress)
 
 	// Build prompt for Claude
-	systemPrompt, userPrompt, err := c.buildPrompt(ctx, task)
+	systemPrompt, userPrompt, err := c.buildPrompt(iterationCtx, task)
 	if err != nil {
+		// Check if error is due to timeout or cancellation
+		if iterationCtx.Err() != nil {
+			record.Complete(OutcomeBudgetExceeded)
+			record.SetFeedback("Iteration timeout exceeded")
+			c.handleTaskFailure(task.ID)
+			return record
+		}
 		record.Complete(OutcomeFailed)
 		record.SetFeedback(fmt.Sprintf("Failed to build prompt: %v", err))
 		c.handleTaskFailure(task.ID)
@@ -407,8 +423,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		Prompt:       userPrompt,
 	}
 
-	resp, err := c.claudeRunner.Run(ctx, req)
+	resp, err := c.claudeRunner.Run(iterationCtx, req)
 	if err != nil {
+		// Check if error is due to timeout
+		if iterationCtx.Err() != nil {
+			record.Complete(OutcomeBudgetExceeded)
+			record.SetFeedback("Iteration timeout exceeded")
+			c.handleTaskFailure(task.ID)
+			return record
+		}
 		record.Complete(OutcomeFailed)
 		record.SetFeedback(fmt.Sprintf("Claude invocation failed: %v", err))
 		c.handleTaskFailure(task.ID)
@@ -425,8 +448,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	}
 
 	// Check for changes
-	hasChanges, err := c.gitManager.HasChanges(ctx)
+	hasChanges, err := c.gitManager.HasChanges(iterationCtx)
 	if err != nil || !hasChanges {
+		// Check if error is due to timeout
+		if iterationCtx.Err() != nil {
+			record.Complete(OutcomeBudgetExceeded)
+			record.SetFeedback("Iteration timeout exceeded")
+			c.handleTaskFailure(task.ID)
+			return record
+		}
 		record.Complete(OutcomeFailed)
 		record.SetFeedback("No changes made by Claude")
 		c.handleTaskFailure(task.ID)
@@ -434,7 +464,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	}
 
 	// Get changed files
-	changedFiles, _ := c.gitManager.GetChangedFiles(ctx)
+	changedFiles, _ := c.gitManager.GetChangedFiles(iterationCtx)
 	record.FilesChanged = changedFiles
 
 	// Run verification with retry loop
@@ -449,8 +479,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	if len(verifyCommands) > 0 {
 		for verificationAttempt <= c.maxVerificationRetries+1 {
 			// Run verification
-			results, err = c.verifier.Verify(ctx, verifyCommands)
+			results, err = c.verifier.Verify(iterationCtx, verifyCommands)
 			if err != nil {
+				// Check if error is due to timeout
+				if iterationCtx.Err() != nil {
+					record.Complete(OutcomeBudgetExceeded)
+					record.SetFeedback("Iteration timeout exceeded during verification")
+					c.handleTaskFailure(task.ID)
+					return record
+				}
 				record.Complete(OutcomeFailed)
 				record.SetFeedback(fmt.Sprintf("Verification error: %v", err))
 				c.handleTaskFailure(task.ID)
@@ -480,8 +517,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 			}
 
 			// Build retry prompt with failure context
-			systemPrompt, userPrompt, err = c.buildRetryPromptForVerificationFailure(ctx, task, results, verificationAttempt)
+			systemPrompt, userPrompt, err = c.buildRetryPromptForVerificationFailure(iterationCtx, task, results, verificationAttempt)
 			if err != nil {
+				// Check if error is due to timeout
+				if iterationCtx.Err() != nil {
+					record.Complete(OutcomeBudgetExceeded)
+					record.SetFeedback("Iteration timeout exceeded during retry")
+					c.handleTaskFailure(task.ID)
+					return record
+				}
 				// If we can't build retry prompt, fail with current results
 				break
 			}
@@ -493,8 +537,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 				Continue:     true, // Continue in the same session
 			}
 
-			retryResp, err := c.claudeRunner.Run(ctx, retryReq)
+			retryResp, err := c.claudeRunner.Run(iterationCtx, retryReq)
 			if err != nil {
+				// Check if error is due to timeout
+				if iterationCtx.Err() != nil {
+					record.Complete(OutcomeBudgetExceeded)
+					record.SetFeedback("Iteration timeout exceeded during retry")
+					c.handleTaskFailure(task.ID)
+					return record
+				}
 				// If retry fails, break and use current verification results
 				break
 			}
@@ -505,7 +556,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 			record.ClaudeInvocation.OutputTokens += retryResp.Usage.OutputTokens
 
 			// Update changed files (Claude may have modified more files)
-			changedFiles, _ = c.gitManager.GetChangedFiles(ctx)
+			changedFiles, _ = c.gitManager.GetChangedFiles(iterationCtx)
 			record.FilesChanged = changedFiles
 
 			verificationAttempt++
@@ -521,8 +572,15 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 
 	// Commit changes
 	commitMsg := git.FormatCommitMessage(task.Title, record.IterationID)
-	commitHash, err := c.gitManager.Commit(ctx, commitMsg)
+	commitHash, err := c.gitManager.Commit(iterationCtx, commitMsg)
 	if err != nil {
+		// Check if error is due to timeout
+		if iterationCtx.Err() != nil {
+			record.Complete(OutcomeBudgetExceeded)
+			record.SetFeedback("Iteration timeout exceeded during commit")
+			c.handleTaskFailure(task.ID)
+			return record
+		}
 		record.Complete(OutcomeFailed)
 		record.SetFeedback(fmt.Sprintf("Commit failed: %v", err))
 		c.handleTaskFailure(task.ID)

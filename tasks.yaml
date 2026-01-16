@@ -319,7 +319,7 @@ tasks:
       Create context with timeout in internal/loop/controller.go.
       Pass to Claude runner. Cancel if timeout exceeded.
       Update budget tracking.
-    status: open
+    status: completed
     acceptance:
       - "Claude subprocess killed if iteration exceeds time limit"
       - "Iteration marked as budget_exceeded"
