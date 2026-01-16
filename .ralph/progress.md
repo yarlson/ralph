@@ -1278,3 +1278,27 @@
 
 **Outcome**: Success - all tests pass, retry prompts now include trimmed failure output, fix-only directive, user feedback when provided, and failure signature for tracking
 
+### 2026-01-16: ralph-align-codebase-patterns (Extract and Use Codebase Patterns)
+
+**What changed:**
+
+- Verified that `GetCodebasePatterns()` is already fully implemented in `internal/memory/progress.go` (lines 146-158)
+- Confirmed patterns extraction is integrated into the loop controller in `buildInitialPrompt()` (line 509 of `controller.go`)
+- Verified patterns are included in Claude prompts via the prompt builder (lines 159-165 of `iteration.go`)
+- Confirmed comprehensive test coverage exists in `progress_test.go` (line 192) with tests for extraction, empty sections, and missing files
+
+**Files touched:**
+
+- `tasks.yaml` (marked ralph-align-codebase-patterns as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- The codebase patterns feature was already fully implemented during the iteration prompt builder integration task
+- `GetCodebasePatterns()` uses `extractSection()` helper with `strings.Cut()` for clean section extraction between markers
+- Patterns are optional in prompts - the builder checks `if ctx.CodebasePatterns != ""` before adding the section
+- The prompt builder truncates patterns using `truncateWithMarker()` respecting `MaxPatternsBytes` size limit (default 2KB)
+- All acceptance criteria were already met: extraction works, patterns included in prompts, empty sections handled gracefully, unit tests exist
+
+**Outcome**: Success - task was already complete, all verification commands pass (go test ./internal/memory/...)
+

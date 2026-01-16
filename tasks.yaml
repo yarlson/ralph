@@ -248,7 +248,7 @@ tasks:
     description: |
       Implement GetCodebasePatterns in internal/memory/progress.go to
       extract Codebase Patterns section. Include in prompt builder.
-    status: open
+    status: completed
     acceptance:
       - "GetCodebasePatterns extracts patterns section"
       - "Patterns included in every Claude iteration prompt"
