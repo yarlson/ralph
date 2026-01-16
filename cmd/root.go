@@ -31,6 +31,7 @@ delegate to Claude Code → verify → commit → repeat.`,
 	// Add subcommands
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newImportCmd())
+	rootCmd.AddCommand(newDecomposeCmd())
 	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newStatusCmd())
 	rootCmd.AddCommand(newLogsCmd())

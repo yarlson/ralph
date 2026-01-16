@@ -31,6 +31,30 @@ go build ./...
 
 ## Quickstart
 
+### Option 1: Start from a PRD
+
+1. **Create or use a PRD file** (Markdown format):
+
+```bash
+# Use the sample PRD or create your own
+cp examples/sample-prd.md docs/my-feature.md
+```
+
+2. **Decompose the PRD into tasks** using Claude:
+
+```bash
+ralph decompose docs/my-feature.md --import
+```
+
+3. **Initialize and run**:
+
+```bash
+ralph init  # Auto-selects root task
+ralph run
+```
+
+### Option 2: Start with manual task definitions
+
 1. **Create a task file** in `.ralph/tasks/` (YAML format) with your tasks
 
 2. **Initialize ralph** with a parent task:
@@ -54,19 +78,20 @@ Ralph will continuously select ready leaf tasks, delegate to Claude Code, verify
 
 ### Commands
 
-| Command        | Description                                                |
-| -------------- | ---------------------------------------------------------- |
-| `ralph init`   | Initialize ralph for a feature                             |
-| `ralph import` | Import tasks from a YAML file into task store              |
-| `ralph run`    | Run the iteration loop                                     |
-| `ralph status` | Show current status (task counts, next task, last outcome) |
-| `ralph pause`  | Pause the iteration loop                                   |
-| `ralph resume` | Resume the iteration loop                                  |
-| `ralph retry`  | Retry a failed task                                        |
-| `ralph skip`   | Skip a task                                                |
-| `ralph report` | Generate end-of-feature summary report                     |
-| `ralph revert` | Revert to state before a specific iteration                |
-| `ralph logs`   | Display iteration logs                                     |
+| Command           | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `ralph init`      | Initialize ralph for a feature                             |
+| `ralph decompose` | Decompose a PRD/SPEC into Ralph tasks using Claude         |
+| `ralph import`    | Import tasks from a YAML file into task store              |
+| `ralph run`       | Run the iteration loop                                     |
+| `ralph status`    | Show current status (task counts, next task, last outcome) |
+| `ralph pause`     | Pause the iteration loop                                   |
+| `ralph resume`    | Resume the iteration loop                                  |
+| `ralph retry`     | Retry a failed task                                        |
+| `ralph skip`      | Skip a task                                                |
+| `ralph report`    | Generate end-of-feature summary report                     |
+| `ralph revert`    | Revert to state before a specific iteration                |
+| `ralph logs`      | Display iteration logs                                     |
 
 ### ralph init
 
@@ -83,6 +108,49 @@ ralph init                   # Auto-init (recommended)
 ralph init --parent <id>     # Explicitly set parent task by ID
 ralph init --search "<term>" # Find parent task by title search
 ```
+
+### ralph decompose
+
+Convert a PRD (Product Requirements Document) or specification file into a hierarchical task graph using Claude Code.
+
+This command analyzes your PRD and generates a `tasks.yaml` file with:
+
+- A root task representing the entire feature
+- Epic tasks organized by functional areas
+- Leaf tasks that are concrete and implementable
+- Proper task hierarchy and dependencies
+- Acceptance criteria for verification
+
+```bash
+ralph decompose docs/prd.md                    # Generate tasks.yaml
+ralph decompose docs/prd.md -o my-tasks.yaml  # Custom output path
+ralph decompose docs/prd.md --import           # Generate and auto-import into task store
+ralph decompose docs/prd.md --timeout 600      # Increase timeout (default: 300s)
+```
+
+**Flags:**
+
+- `--import`: Automatically imports the generated tasks into `.ralph/tasks/` after generation. Without this flag, you need to manually run `ralph import tasks.yaml`.
+- `-o, --output`: Specify output file path (default: `tasks.yaml`)
+- `--timeout`: Claude execution timeout in seconds (default: 300)
+
+Without `--import`, the generated YAML file must be imported separately using `ralph import`.
+
+**Example workflow:**
+
+```bash
+# 1. Create a PRD file
+echo "# My Feature\n\n## Requirements\n..." > docs/prd.md
+
+# 2. Decompose into tasks
+ralph decompose docs/prd.md --import
+
+# 3. Initialize and run
+ralph init
+ralph run
+```
+
+See `examples/sample-prd.md` for a sample PRD format.
 
 ### ralph import
 
