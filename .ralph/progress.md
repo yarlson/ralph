@@ -591,3 +591,40 @@
 - TDD approach: wrote 24 tests first covering GutterReason validity, config defaults, detector creation, failure signatures, repeated failure detection, file churn detection, reset, state persistence, and disabled detection
 
 **Outcome**: Success - all 69 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: loop-controller-orchestrator (Main Loop Orchestrator)
+
+**What changed:**
+- Implemented `Controller` struct in `internal/loop/controller.go` that orchestrates the main iteration loop
+- Created `ControllerDeps` struct for dependency injection: TaskStore, Claude Runner, Verifier, Git Manager, ProgressFile
+- Created `RunLoopOutcome` type with values: completed, blocked, budget_exceeded, gutter_detected, paused, error
+- Created `RunResult` struct containing: Outcome, Message, IterationsRun, CompletedTasks, FailedTasks, Records, TotalCostUSD, ElapsedTime
+- Implemented `NewController(deps)` constructor that initializes budget and gutter trackers with defaults
+- Implemented `RunLoop(ctx, parentTaskID)` main method that:
+  - Checks context cancellation, budget limits, and gutter conditions before each iteration
+  - Uses selector.SelectNext to pick the next ready leaf task
+  - Runs single iteration: invoke Claude, check for changes, run verification, commit on success
+  - Updates task status (in_progress → completed/open)
+  - Records iteration in budget and gutter trackers
+  - Continues until all tasks completed, blocked, or limits reached
+- Implemented `RunOnce(ctx, parentTaskID)` for single iteration mode (--once flag)
+- Implemented `runIteration(ctx, task)` that handles:
+  - Getting base commit, invoking Claude, checking for changes
+  - Running verification commands, formatting feedback on failure
+  - Committing changes with formatted message, updating progress file
+- Implemented `buildPrompt(task)` to construct Claude prompts with task details and instructions
+- Implemented `GetSummary(ctx, parentTaskID)` for status reporting with task counts
+- Added `SetBudgetLimits()` and `SetGutterConfig()` for configuration
+
+**Files touched:**
+- `internal/loop/controller.go` (new)
+- `internal/loop/controller_test.go` (new)
+
+**Learnings:**
+- Need to disable gutter detection in tests when testing multi-task scenarios to avoid false positives from same files being changed
+- When no tasks exist for a parent, returning "completed" (vacuously true) is reasonable behavior
+- Use `dynamicGitManager` mock pattern when different return values are needed per call
+- Controller integrates all core components: TaskStore, Selector, ClaudeRunner, Verifier, GitManager, MemoryManager
+- TDD approach: wrote 20 tests first covering outcome validity, constructor, loop scenarios (no tasks, success, verification failure, budget exceeded, context cancellation, Claude error, no changes, multiple tasks), run once, summary, dependency graph ordering
+
+**Outcome**: Success - all 95 loop tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

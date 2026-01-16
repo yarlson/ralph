@@ -801,7 +801,7 @@ tasks:
       - Update progress.md
       - Check budgets and gutter after each iteration
       - Return summary of run
-    status: open
+    status: completed
     acceptance:
       - "Full iteration cycle implemented"
       - "Task status updated correctly"

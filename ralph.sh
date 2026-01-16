@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROMPT=$(
-	cat <<'EOF'
+read -r -d '' PROMPT <<'EOF' || true
 Read PRD.md, tasks.yaml, and .ralph/progress.md.
 
 Pick exactly ONE task from tasks.yaml:
@@ -30,7 +29,6 @@ If ALL tasks in tasks.yaml are completed, print RALPH_DONE as the LAST line and 
 If no ready tasks exist but some are incomplete, print RALPH_BLOCKED as the LAST line and stop (include blocked task ids/titles above it).
 Do not ask the user questions. Stop.
 EOF
-)
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
@@ -134,7 +132,6 @@ while :; do
 		exit 2
 	fi
 
-	# If we got here, Claude reported a normal completed run (not done/blocked).
 	gic -y
 	say "Task completed. Moving to the next one."
 done
