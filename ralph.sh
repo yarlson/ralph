@@ -81,12 +81,6 @@ fmt_duration() {
   printf '%02d:%02d:%02d' "$h" "$m" "$r"
 }
 
-say_if_available() {
-  # Speak only if 'say' exists (macOS)
-  have_cmd say || return 0
-  say "$@"
-}
-
 run_id=0
 
 while :; do
@@ -130,18 +124,18 @@ while :; do
   banner "${C_GREEN}" "Finished task run #${run_id}" "Time taken: ${elapsed_fmt}"
 
   if [ "$status" = "RALPH_DONE" ]; then
-    say_if_available "All tasks are complete. The project is finished."
+    say "All tasks are complete. The project is finished."
     exit 0
   fi
 
   if [ "$status" = "RALPH_BLOCKED" ]; then
     printf '%sRalph is blocked%s (no ready tasks). Review dependencies in tasks.yaml.\n' "${C_YELLOW}${C_BOLD}" "${C_RESET}" >&2
-    say_if_available "Ralph is blocked. No ready tasks."
+    say "Ralph is blocked. No ready tasks."
     exit 2
   fi
 
   # If we got here, Claude reported a normal completed run (not done/blocked).
   gic -y
-  say_if_available "Task completed. Moving to the next one."
+  say "Task completed. Moving to the next one."
 done
 
