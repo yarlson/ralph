@@ -385,3 +385,25 @@
 - TDD approach: wrote 25 tests first covering empty input, no limits, under limits, exact limits, both limits with different restrictiveness, single lines, trailing newlines, empty lines, large input, and feedback formatting
 
 **Outcome**: Success - all 40 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: git-manager-interface (GitManager Interface)
+
+**What changed:**
+- Created `internal/git` package for Git operations
+- Defined `Manager` interface with 7 methods: `EnsureBranch`, `GetCurrentCommit`, `HasChanges`, `GetDiffStat`, `GetChangedFiles`, `Commit`, `GetCurrentBranch`
+- All methods accept `context.Context` for cancellation/timeout support
+- Implemented 4 sentinel errors: `ErrNotAGitRepo`, `ErrNoChanges`, `ErrBranchExists`, `ErrCommitFailed`
+- Implemented `GitError` struct for rich error context with command, output, and wrapped error support
+- `GitError` implements `Unwrap()` for use with `errors.Is()` and `errors.As()`
+
+**Files touched:**
+- `internal/git/manager.go` (new)
+- `internal/git/manager_test.go` (new)
+
+**Learnings:**
+- Interface naming: `Manager` avoids stutter in package (`git.Manager` vs `git.GitManager`)
+- All interface methods should accept `context.Context` as first parameter for proper cancellation support
+- Sentinel errors with typed wrapper errors (like `GitError`) provide both convenient `errors.Is()` checks and detailed error context
+- TDD approach: wrote 14 tests first covering interface implementation via mock, all method behaviors, error types, and error wrapping
+
+**Outcome**: Success - all 14 git tests pass, `go build ./...` and `go test ./...` succeed
