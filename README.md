@@ -56,6 +56,7 @@ Ralph will continuously select ready leaf tasks, delegate to Claude Code, verify
 | Command        | Description                                                |
 | -------------- | ---------------------------------------------------------- |
 | `ralph init`   | Initialize ralph for a feature                             |
+| `ralph import` | Import tasks from a YAML file into task store              |
 | `ralph run`    | Run the iteration loop                                     |
 | `ralph status` | Show current status (task counts, next task, last outcome) |
 | `ralph pause`  | Pause the iteration loop                                   |
@@ -63,14 +64,25 @@ Ralph will continuously select ready leaf tasks, delegate to Claude Code, verify
 | `ralph retry`  | Retry a failed task                                        |
 | `ralph skip`   | Skip a task                                                |
 | `ralph report` | Generate end-of-feature summary report                     |
+| `ralph revert` | Revert to state before a specific iteration                |
+| `ralph logs`   | Display iteration logs                                     |
 
 ### ralph init
 
 Initialize ralph by setting the parent task ID and validating the task graph.
 
 ```bash
-ralph init --parent <id>    # Set parent task by ID
+ralph init --parent <id>     # Set parent task by ID
 ralph init --search "<term>" # Find parent task by title search
+```
+
+### ralph import
+
+Import tasks from a YAML file into the task store.
+
+```bash
+ralph import tasks.yaml            # Import tasks from file
+ralph import tasks.yaml --overwrite # Update existing tasks
 ```
 
 ### ralph run
@@ -78,9 +90,10 @@ ralph init --search "<term>" # Find parent task by title search
 Execute the iteration loop until all tasks are done or limits are reached.
 
 ```bash
-ralph run                    # Run continuously
-ralph run --once            # Run only a single iteration
-ralph run --max-iterations 10 # Limit iterations (overrides config)
+ralph run                       # Run continuously
+ralph run --once                # Run only a single iteration
+ralph run --max-iterations 10   # Limit iterations (overrides config)
+ralph run --branch <name>       # Use specific branch name
 ```
 
 ### ralph status
@@ -127,6 +140,24 @@ ralph report                 # Output to stdout
 ralph report -o report.md    # Write to file
 ```
 
+### ralph revert
+
+Revert to the state before a specific iteration (git reset --hard).
+
+```bash
+ralph revert --iteration <id>         # Revert to state before iteration
+ralph revert --iteration <id> --force # Skip confirmation prompt
+```
+
+### ralph logs
+
+Display iteration logs.
+
+```bash
+ralph logs                      # Show all iteration logs
+ralph logs --iteration <id>     # Show logs for specific iteration
+```
+
 ### Global Flags
 
 | Flag       | Description      | Default      |
@@ -150,6 +181,8 @@ tasks:
 memory:
   progress_file: ".ralph/progress.md"
   archive_dir: ".ralph/archive"
+  max_progress_bytes: 1048576
+  max_recent_iterations: 20
 
 claude:
   command: ["claude", "code"]
@@ -163,12 +196,16 @@ verification:
 loop:
   max_iterations: 50
   max_minutes_per_iteration: 20
+  max_retries: 2
+  max_verification_retries: 2
   gutter:
     max_same_failure: 3
     max_churn_commits: 2
+    max_oscillations: 2
+    enable_content_hash: true
 
 safety:
-  sandbox: true
+  sandbox: false
   allowed_commands:
     - "npm"
     - "go"
@@ -177,25 +214,73 @@ safety:
 
 ### Configuration Options
 
-| Section                          | Option                              | Description |
-| -------------------------------- | ----------------------------------- | ----------- |
-| `repo.branch_prefix`             | Git branch prefix for features      |
-| `tasks.path`                     | Path to task storage directory      |
-| `tasks.parent_id_file`           | File storing current parent task ID |
-| `memory.progress_file`           | Feature progress log file           |
-| `claude.command`                 | Claude Code CLI command             |
-| `verification.commands`          | Commands to run for verification    |
-| `loop.max_iterations`            | Maximum iterations per run          |
-| `loop.max_minutes_per_iteration` | Time limit per iteration            |
-| `loop.gutter.max_same_failure`   | Stop after N same failures          |
-| `loop.gutter.max_churn_commits`  | Stop after N churn commits          |
-| `safety.allowed_commands`        | Allowlist for shell commands        |
+| Section                           | Option | Description                             |
+| --------------------------------- | ------ | --------------------------------------- |
+| `repo.root`                       |        | Repository root directory               |
+| `repo.branch_prefix`              |        | Git branch prefix for features          |
+| `tasks.backend`                   |        | Task storage backend (`local`)          |
+| `tasks.path`                      |        | Path to task storage directory          |
+| `tasks.parent_id_file`            |        | File storing current parent task ID     |
+| `memory.progress_file`            |        | Feature progress log file               |
+| `memory.archive_dir`              |        | Archive directory for old progress      |
+| `memory.max_progress_bytes`       |        | Max size before pruning                 |
+| `memory.max_recent_iterations`    |        | Number of recent iterations to preserve |
+| `claude.command`                  |        | Claude Code CLI command                 |
+| `claude.args`                     |        | Additional arguments for Claude Code    |
+| `verification.commands`           |        | Commands to run for verification        |
+| `loop.max_iterations`             |        | Maximum iterations per run              |
+| `loop.max_minutes_per_iteration`  |        | Time limit per iteration                |
+| `loop.max_retries`                |        | Max retries for failed tasks            |
+| `loop.max_verification_retries`   |        | Max in-iteration fix attempts           |
+| `loop.gutter.max_same_failure`    |        | Stop after N same failures              |
+| `loop.gutter.max_churn_commits`   |        | Stop after N churn commits              |
+| `loop.gutter.max_oscillations`    |        | Stop after N file oscillations          |
+| `loop.gutter.enable_content_hash` |        | Use content hashing for oscillation     |
+| `safety.sandbox`                  |        | Enable sandbox mode                     |
+| `safety.allowed_commands`         |        | Allowlist for shell commands            |
 
 ### Environment Variables
 
 | Variable         | Description                                                  |
 | ---------------- | ------------------------------------------------------------ |
 | `CLAUDE_API_KEY` | API key for Claude Code (required by Claude Code subprocess) |
+
+## Task Definition
+
+Tasks are defined in YAML files in `.ralph/tasks/`:
+
+```yaml
+tasks:
+  - id: task-1
+    title: "My Task"
+    description: "Detailed standalone description"
+    parentId: parent-task-id
+    dependsOn:
+      - other-task-id
+    status: open
+    acceptance:
+      - "Criterion 1"
+      - "Criterion 2"
+    verify:
+      - ["go", "test", "./..."]
+    labels:
+      area: core
+      priority: P0
+```
+
+### Task Fields
+
+| Field         | Description                                                        |
+| ------------- | ------------------------------------------------------------------ |
+| `id`          | Unique identifier                                                  |
+| `title`       | Short summary                                                      |
+| `description` | Detailed standalone description                                    |
+| `parentId`    | Optional parent task ID                                            |
+| `dependsOn`   | Task IDs that must complete first                                  |
+| `status`      | `open`, `in_progress`, `completed`, `blocked`, `failed`, `skipped` |
+| `acceptance`  | Verifiable acceptance criteria                                     |
+| `verify`      | Task-specific verification commands                                |
+| `labels`      | Optional categorization                                            |
 
 ## Storage
 
@@ -206,11 +291,18 @@ Ralph stores state in the `.ralph/` directory:
 | `.ralph/tasks/`      | Task store (YAML files)                   |
 | `.ralph/progress.md` | Feature progress log                      |
 | `.ralph/state/`      | Session IDs, pause state, budget tracking |
-| `.ralph/logs/`       | Iteration logs                            |
+| `.ralph/logs/`       | Iteration logs (JSON and text)            |
+| `.ralph/archive/`    | Archived progress files                   |
 
 ## Troubleshooting
 
-Not documented. Check `ralph.yaml` and command help (`ralph --help`) for details.
+### Configuration and CLI Flag Issues
+
+Configuration loading may have edge cases. Ensure your `ralph.yaml` is valid YAML and follows the documented structure. Run `ralph --help` for command-specific flags.
+
+### Progress File Growth
+
+The progress file is automatically pruned when it exceeds `max_progress_bytes`. Recent iterations (configured by `max_recent_iterations`) are preserved along with headers and pattern sections.
 
 ## Development
 
