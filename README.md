@@ -36,9 +36,10 @@ go build ./...
 2. **Initialize ralph** with a parent task:
 
 ```bash
-ralph init --parent <task-id>
-# or search by title
-ralph init --search "feature name"
+ralph init                        # Auto-selects if single root, prompts if multiple
+# or explicitly specify:
+ralph init --parent <task-id>     # Set by task ID
+ralph init --search "feature name" # Search by title
 ```
 
 3. **Run the loop**:
@@ -71,8 +72,15 @@ Ralph will continuously select ready leaf tasks, delegate to Claude Code, verify
 
 Initialize ralph by setting the parent task ID and validating the task graph.
 
+**Auto-initialization** (no flags required):
+
+- Single root task: Auto-selects silently
+- Multiple root tasks: Shows interactive menu (or errors in non-TTY with task list)
+- No root tasks: Errors with instructions
+
 ```bash
-ralph init --parent <id>     # Set parent task by ID
+ralph init                   # Auto-init (recommended)
+ralph init --parent <id>     # Explicitly set parent task by ID
 ralph init --search "<term>" # Find parent task by title search
 ```
 
@@ -89,8 +97,10 @@ ralph import tasks.yaml --overwrite # Update existing tasks
 
 Execute the iteration loop until all tasks are done or limits are reached.
 
+If no parent task is set, `ralph run` will attempt auto-initialization (same behavior as `ralph init`).
+
 ```bash
-ralph run                       # Run continuously
+ralph run                       # Run continuously (auto-inits if needed)
 ralph run --once                # Run only a single iteration
 ralph run --max-iterations 10   # Limit iterations (overrides config)
 ralph run --branch <name>       # Use specific branch name

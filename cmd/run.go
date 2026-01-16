@@ -1,20 +1,26 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/yarlson/go-ralph/internal/claude"
 	"github.com/yarlson/go-ralph/internal/config"
 	gitpkg "github.com/yarlson/go-ralph/internal/git"
 	"github.com/yarlson/go-ralph/internal/loop"
 	"github.com/yarlson/go-ralph/internal/memory"
+	"github.com/yarlson/go-ralph/internal/selector"
 	"github.com/yarlson/go-ralph/internal/state"
 	"github.com/yarlson/go-ralph/internal/taskstore"
 	"github.com/yarlson/go-ralph/internal/verifier"
@@ -60,16 +66,32 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Read parent task ID
+	// Read parent task ID (or auto-initialize)
 	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
 	parentIDBytes, err := os.ReadFile(parentIDFile)
+	var parentTaskID string
+
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("parent-task-id file not found. Run 'ralph init' first")
+			// Attempt auto-initialization
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No parent task set. Attempting auto-initialization...\n")
+
+			autoInitID, wasAutoInit, autoErr := autoInitParentTask(cmd, workDir, cfg)
+			if autoErr != nil {
+				return autoErr
+			}
+
+			if wasAutoInit {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Auto-initialized with parent task: %s\n\n", autoInitID)
+			}
+
+			parentTaskID = autoInitID
+		} else {
+			return fmt.Errorf("failed to read parent-task-id: %w", err)
 		}
-		return fmt.Errorf("failed to read parent-task-id: %w", err)
+	} else {
+		parentTaskID = string(parentIDBytes)
 	}
-	parentTaskID := string(parentIDBytes)
 
 	// Ensure ralph directories exist
 	if err := state.EnsureRalphDir(workDir); err != nil {
@@ -152,7 +174,7 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 
 	// Configure budget limits
 	budgetLimits := loop.BudgetLimits{
-		MaxIterations:        cfg.Loop.MaxIterations,
+		MaxIterations:          cfg.Loop.MaxIterations,
 		MaxMinutesPerIteration: cfg.Loop.MaxMinutesPerIteration,
 	}
 	if maxIterations > 0 {
@@ -256,4 +278,189 @@ func formatRunResult(result loop.RunResult) string {
 	}
 
 	return output
+}
+
+// autoInitParentTask attempts automatic parent task initialization
+// Returns: (parentTaskID, wasAutoInit, error)
+func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) (string, bool, error) {
+	// Open task store
+	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	store, err := taskstore.NewLocalStore(tasksPath)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to open task store: %w", err)
+	}
+
+	// Get root tasks
+	rootTasks, err := store.ListByParent("")
+	if err != nil {
+		return "", false, fmt.Errorf("failed to list root tasks: %w", err)
+	}
+
+	// Handle zero roots
+	if len(rootTasks) == 0 {
+		return "", false, fmt.Errorf("no root tasks found (create tasks in .ralph/tasks/)")
+	}
+
+	var selectedTask *taskstore.Task
+
+	// Handle single root
+	if len(rootTasks) == 1 {
+		selectedTask = rootTasks[0]
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found single root task: %s (%s)\n", selectedTask.Title, selectedTask.ID)
+	} else {
+		// Handle multiple roots - prompt user
+		selected, err := promptRootTaskSelection(cmd, rootTasks)
+		if err != nil {
+			return "", false, err
+		}
+		selectedTask = selected
+	}
+
+	// Validate selected task has ready leaves
+	if err := validateTaskHasReadyLeaves(store, selectedTask.ID); err != nil {
+		return "", false, err
+	}
+
+	// Ensure state directory exists
+	if err := state.EnsureRalphDir(workDir); err != nil {
+		return "", false, fmt.Errorf("failed to create .ralph directory: %w", err)
+	}
+
+	// Write parent-task-id file (config-specified location for backward compat)
+	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+	if err := os.WriteFile(parentIDFile, []byte(selectedTask.ID), 0644); err != nil {
+		return "", false, fmt.Errorf("failed to write parent-task-id: %w", err)
+	}
+
+	// Write to state directory
+	if err := state.SetStoredParentTaskID(workDir, selectedTask.ID); err != nil {
+		return "", false, fmt.Errorf("failed to set stored parent task ID: %w", err)
+	}
+
+	// Initialize progress file if needed
+	progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
+	progressFile := memory.NewProgressFile(progressPath)
+	if !progressFile.Exists() {
+		if err := progressFile.Init(selectedTask.Title, selectedTask.ID); err != nil {
+			return "", false, fmt.Errorf("failed to initialize progress file: %w", err)
+		}
+	}
+
+	return selectedTask.ID, true, nil
+}
+
+// promptRootTaskSelection shows interactive menu for root task selection
+func promptRootTaskSelection(cmd *cobra.Command, rootTasks []*taskstore.Task) (*taskstore.Task, error) {
+	// Check if TTY
+	if !isTerminal(cmd.InOrStdin()) {
+		// Format list for error message
+		var taskList string
+		for _, t := range rootTasks {
+			taskList += fmt.Sprintf("  - %s (%s)\n", t.Title, t.ID)
+		}
+		return nil, fmt.Errorf("multiple root tasks found (non-TTY):\n%s\nUse --parent <task-id> to specify which task to use", taskList)
+	}
+
+	// Display menu
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nSelect a root task:\n\n")
+	for i, t := range rootTasks {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d) %s (%s)\n", i+1, t.Title, t.ID)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nEnter number (1-%d) or 'q' to quit: ", len(rootTasks))
+
+	// Read input
+	reader := bufio.NewReader(cmd.InOrStdin())
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read selection: %w", err)
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	if response == "q" || response == "quit" {
+		return nil, fmt.Errorf("task selection cancelled")
+	}
+
+	// Parse selection
+	selection, err := strconv.Atoi(response)
+	if err != nil || selection < 1 || selection > len(rootTasks) {
+		return nil, fmt.Errorf("invalid selection: %q (expected 1-%d)", response, len(rootTasks))
+	}
+
+	return rootTasks[selection-1], nil
+}
+
+// isTerminal checks if the reader is a terminal (for interactive prompts)
+func isTerminal(r io.Reader) bool {
+	if f, ok := r.(*os.File); ok {
+		return term.IsTerminal(int(f.Fd()))
+	}
+	// For testing: if it's not a file (e.g., bytes.Buffer), assume it's interactive
+	// This allows tests to mock stdin input
+	return true
+}
+
+// validateTaskHasReadyLeaves checks that a task has at least one ready leaf descendant
+func validateTaskHasReadyLeaves(store *taskstore.LocalStore, taskID string) error {
+	// Load all tasks
+	allTasks, err := store.List()
+	if err != nil {
+		return fmt.Errorf("failed to list tasks: %w", err)
+	}
+
+	// Build graph
+	graph, err := selector.BuildGraph(allTasks)
+	if err != nil {
+		return fmt.Errorf("failed to build task graph: %w", err)
+	}
+
+	// Check for cycles
+	if cycle := graph.DetectCycle(); cycle != nil {
+		return fmt.Errorf("task graph contains cycle")
+	}
+
+	// Get descendants of selected root
+	descendants := getDescendantIDsOf(allTasks, taskID)
+
+	// Get ready leaves
+	readyLeaves := selector.GetReadyLeaves(allTasks, graph)
+
+	// Check if any ready leaf is a descendant
+	for _, leaf := range readyLeaves {
+		if descendants[leaf.ID] || leaf.ID == taskID {
+			return nil // Found at least one ready task
+		}
+	}
+
+	// Get the task to show its title in error
+	task, err := store.Get(taskID)
+	if err != nil {
+		return fmt.Errorf("no ready tasks under task %q", taskID)
+	}
+
+	return fmt.Errorf("no ready tasks under root %q", task.Title)
+}
+
+// getDescendantIDsOf returns a set of all descendant task IDs under the given parent
+func getDescendantIDsOf(tasks []*taskstore.Task, parentID string) map[string]bool {
+	// Build parent-to-children map
+	children := make(map[string][]string)
+	for _, t := range tasks {
+		if t.ParentID != nil {
+			children[*t.ParentID] = append(children[*t.ParentID], t.ID)
+		}
+	}
+
+	// BFS to find all descendants
+	descendants := make(map[string]bool)
+	queue := children[parentID]
+
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		descendants[id] = true
+		queue = append(queue, children[id]...)
+	}
+
+	return descendants
 }

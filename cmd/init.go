@@ -37,9 +37,6 @@ func newInitCmd() *cobra.Command {
 
 func runInit(cmd *cobra.Command, parentID, searchTerm string) error {
 	// Validate flags
-	if parentID == "" && searchTerm == "" {
-		return errors.New("either --parent or --search must be specified")
-	}
 	if parentID != "" && searchTerm != "" {
 		return errors.New("cannot specify both --parent and --search")
 	}
@@ -69,13 +66,25 @@ func runInit(cmd *cobra.Command, parentID, searchTerm string) error {
 	}
 
 	// Resolve parent task ID
-	resolvedID := parentID
-	if searchTerm != "" {
+	var resolvedID string
+	if parentID != "" {
+		resolvedID = parentID
+	} else if searchTerm != "" {
 		foundID, err := searchTaskByTitle(store, searchTerm)
 		if err != nil {
 			return err
 		}
 		resolvedID = foundID
+	} else {
+		// Attempt auto-initialization
+		autoInitID, wasAutoInit, autoErr := autoInitParentTaskForInit(cmd, workDir, cfg, store)
+		if autoErr != nil {
+			return autoErr
+		}
+		if wasAutoInit {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Auto-initialized with parent task: %s\n\n", autoInitID)
+		}
+		resolvedID = autoInitID
 	}
 
 	// Validate parent task exists
@@ -243,4 +252,42 @@ func getDescendantIDs(tasks []*taskstore.Task, parentID string) map[string]bool 
 	}
 
 	return descendants
+}
+
+// autoInitParentTaskForInit attempts automatic parent task initialization for init command
+// Returns: (parentTaskID, wasAutoInit, error)
+// This is similar to autoInitParentTask in run.go but doesn't write files (that's done by runInit)
+func autoInitParentTaskForInit(cmd *cobra.Command, workDir string, cfg *config.Config, store *taskstore.LocalStore) (string, bool, error) {
+	// Get root tasks
+	rootTasks, err := store.ListByParent("")
+	if err != nil {
+		return "", false, fmt.Errorf("failed to list root tasks: %w", err)
+	}
+
+	// Handle zero roots
+	if len(rootTasks) == 0 {
+		return "", false, fmt.Errorf("no root tasks found (create tasks in .ralph/tasks/)")
+	}
+
+	var selectedTask *taskstore.Task
+
+	// Handle single root
+	if len(rootTasks) == 1 {
+		selectedTask = rootTasks[0]
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found single root task: %s (%s)\n", selectedTask.Title, selectedTask.ID)
+	} else {
+		// Handle multiple roots - prompt user
+		selected, err := promptRootTaskSelection(cmd, rootTasks)
+		if err != nil {
+			return "", false, err
+		}
+		selectedTask = selected
+	}
+
+	// Validate selected task has ready leaves
+	if err := validateTaskHasReadyLeaves(store, selectedTask.ID); err != nil {
+		return "", false, err
+	}
+
+	return selectedTask.ID, true, nil
 }

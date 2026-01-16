@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,11 +36,13 @@ func TestRunCmd_NoParentTaskID(t *testing.T) {
 	defer func() { _ = os.Chdir(oldWd) }()
 	require.NoError(t, os.Chdir(tmpDir))
 
-	// Create ralph dir but no parent-task-id file
+	// Create ralph dir structure with tasks directory but no parent-task-id file
 	err = os.MkdirAll(filepath.Join(tmpDir, ".ralph"), 0755)
 	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755)
+	require.NoError(t, err)
 
-	// Run command
+	// Run command - should attempt auto-init and fail with no root tasks
 	rootCmd := NewRootCmd()
 	rootCmd.SetArgs([]string{"run"})
 
@@ -49,7 +52,8 @@ func TestRunCmd_NoParentTaskID(t *testing.T) {
 
 	err = rootCmd.Execute()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parent-task-id")
+	// Auto-init will attempt and fail because there are no root tasks
+	assert.Contains(t, err.Error(), "no root tasks found")
 }
 
 func TestRunCmd_NonExistentParentTask(t *testing.T) {
@@ -164,13 +168,13 @@ func TestRunCmd_Integration_NoReadyTasks(t *testing.T) {
 
 func TestRunResult_FormatOutput(t *testing.T) {
 	result := loop.RunResult{
-		Outcome:       loop.RunOutcomeCompleted,
-		Message:       "all tasks completed",
-		IterationsRun: 3,
+		Outcome:        loop.RunOutcomeCompleted,
+		Message:        "all tasks completed",
+		IterationsRun:  3,
 		CompletedTasks: []string{"task-1", "task-2", "task-3"},
-		FailedTasks:   []string{},
-		TotalCostUSD:  0.05,
-		ElapsedTime:   5 * time.Minute,
+		FailedTasks:    []string{},
+		TotalCostUSD:   0.05,
+		ElapsedTime:    5 * time.Minute,
 	}
 
 	// Format the result
@@ -286,4 +290,287 @@ func TestRunCmd_RespectsPausedState(t *testing.T) {
 	err = rootCmd.Execute()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "paused")
+}
+
+// Auto-init test scenarios
+
+func setupTestDirWithTasks(t *testing.T, rootCount int) (string, *taskstore.LocalStore) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repository
+	require.NoError(t, exec.Command("git", "init", "-b", "main").Run())
+	require.NoError(t, exec.Command("git", "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "config", "commit.gpgsign", "false").Run())
+
+	// Create initial commit
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Test"), 0644))
+	require.NoError(t, exec.Command("git", "add", ".").Run())
+	require.NoError(t, exec.Command("git", "commit", "-m", "Initial commit").Run())
+
+	// Create .ralph directories
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "state"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "logs"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "logs", "claude"), 0755))
+
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	// Create root tasks
+	for i := 0; i < rootCount; i++ {
+		root := &taskstore.Task{
+			ID:          fmt.Sprintf("root-%d", i+1),
+			Title:       fmt.Sprintf("Root Task %d", i+1),
+			Description: fmt.Sprintf("Description for root task %d", i+1),
+			Status:      taskstore.StatusOpen,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		require.NoError(t, store.Save(root))
+
+		// Create a ready leaf under each root
+		leaf := &taskstore.Task{
+			ID:          fmt.Sprintf("leaf-%d", i+1),
+			Title:       fmt.Sprintf("Leaf %d", i+1),
+			Description: fmt.Sprintf("Description for leaf %d", i+1),
+			Status:      taskstore.StatusOpen,
+			ParentID:    &root.ID,
+			Verify:      [][]string{{"echo", "ok"}},
+			Acceptance:  []string{"works"},
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		require.NoError(t, store.Save(leaf))
+	}
+
+	return tmpDir, store
+}
+
+func TestRunCmd_AutoInit_SingleRootTask(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify parent-task-id was written
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", string(data))
+
+	// Verify auto-init message appeared
+	output := outBuf.String()
+	assert.Contains(t, output, "Auto-initialized")
+	assert.Contains(t, output, "root-1")
+}
+
+func TestRunCmd_AutoInit_ZeroRootTasks(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 0)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no root tasks found")
+}
+
+func TestRunCmd_AutoInit_MultipleRoots_Interactive(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 3)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	// Mock stdin with selection "2\n"
+	inputBuf := bytes.NewBufferString("2\n")
+	rootCmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify correct task was selected
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-2", string(data))
+
+	// Verify menu was displayed
+	output := outBuf.String()
+	assert.Contains(t, output, "Select a root task")
+	assert.Contains(t, output, "1) Root Task 1")
+	assert.Contains(t, output, "2) Root Task 2")
+	assert.Contains(t, output, "3) Root Task 3")
+}
+
+func TestRunCmd_AutoInit_MultipleRoots_NonTTY(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	// Use os.Stdin which will be detected as non-TTY in test environment
+	// Don't set stdin, use default which is non-TTY in tests
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple root tasks found")
+	assert.Contains(t, err.Error(), "Root Task 1")
+	assert.Contains(t, err.Error(), "Root Task 2")
+	assert.Contains(t, err.Error(), "Root Task 3")
+	assert.Contains(t, err.Error(), "--parent")
+}
+
+func TestRunCmd_AutoInit_NoReadyLeaves(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repository
+	require.NoError(t, exec.Command("git", "init", "-b", "main").Run())
+	require.NoError(t, exec.Command("git", "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "config", "commit.gpgsign", "false").Run())
+
+	// Create initial commit
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Test"), 0644))
+	require.NoError(t, exec.Command("git", "add", ".").Run())
+	require.NoError(t, exec.Command("git", "commit", "-m", "Initial commit").Run())
+
+	// Create .ralph directories
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "state"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "logs"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "logs", "claude"), 0755))
+
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	// Create root task
+	root := &taskstore.Task{
+		ID:        "root-no-ready",
+		Title:     "Root Without Ready Leaves",
+		Status:    taskstore.StatusOpen,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	require.NoError(t, store.Save(root))
+
+	// Create a child with StatusCompleted (not ready)
+	child := &taskstore.Task{
+		ID:         "completed-child",
+		Title:      "Completed Child",
+		Status:     taskstore.StatusCompleted,
+		ParentID:   &root.ID,
+		Verify:     [][]string{{"echo", "ok"}},
+		Acceptance: []string{"works"},
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	require.NoError(t, store.Save(child))
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err = rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ready tasks")
+}
+
+func TestRunCmd_AutoInit_UserCancelsSelection(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	// Mock stdin with "q\n" (quit)
+	inputBuf := bytes.NewBufferString("q\n")
+	rootCmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+func TestRunCmd_AutoInit_InvalidSelection(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	// Mock stdin with invalid selection
+	inputBuf := bytes.NewBufferString("99\n")
+	rootCmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
+}
+
+func TestRunCmd_ExistingParentTaskID_SkipsAutoInit(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 2)
+
+	// Write parent-task-id file manually
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	require.NoError(t, os.WriteFile(parentIDFile, []byte("root-1"), 0644))
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	var outBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&outBuf)
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify auto-init message did NOT appear
+	output := outBuf.String()
+	assert.NotContains(t, output, "Auto-initialized")
+	assert.NotContains(t, output, "No parent task set")
+
+	// Verify parent task ID is still root-1
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", string(data))
 }

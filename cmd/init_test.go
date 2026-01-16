@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,8 +54,12 @@ func TestInitCommand(t *testing.T) {
 		require.NotNil(t, flag, "expected --search flag to exist")
 	})
 
-	t.Run("requires either --parent or --search", func(t *testing.T) {
+	t.Run("attempts auto-init when no flags provided", func(t *testing.T) {
 		tmpDir := t.TempDir()
+
+		// Create task store with no root tasks
+		_, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
+		require.NoError(t, err)
 
 		cmd := NewRootCmd()
 		cmd.SetArgs([]string{"init", "--config", filepath.Join(tmpDir, "ralph.yaml")})
@@ -64,9 +69,10 @@ func TestInitCommand(t *testing.T) {
 		require.NoError(t, os.Chdir(tmpDir))
 		defer func() { _ = os.Chdir(oldWd) }()
 
-		err := cmd.Execute()
+		err = cmd.Execute()
+		// Should fail with auto-init error (no root tasks)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "either --parent or --search")
+		assert.Contains(t, err.Error(), "no root tasks found")
 	})
 
 	t.Run("--parent creates .ralph directory structure", func(t *testing.T) {
@@ -521,4 +527,141 @@ func TestInitCommand(t *testing.T) {
 // strPtr is a helper to create string pointers
 func strPtr(s string) *string {
 	return &s
+}
+
+// Auto-init tests
+
+func TestInitCmd_AutoInit_SingleRootTask(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"init"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify parent-task-id was written
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", string(data))
+
+	// Verify state was updated
+	storedID, err := state.GetStoredParentTaskID(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", storedID)
+
+	// Verify output message
+	output := outBuf.String()
+	assert.Contains(t, output, "Found single root task")
+	assert.Contains(t, output, "root-1")
+}
+
+func TestInitCmd_AutoInit_ZeroRootTasks(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 0)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"init"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no root tasks found")
+}
+
+func TestInitCmd_AutoInit_MultipleRoots_Interactive(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 3)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"init"})
+
+	// Mock stdin with selection "2\n"
+	inputBuf := bytes.NewBufferString("2\n")
+	cmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify correct task was selected
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-2", string(data))
+
+	// Verify menu was displayed
+	output := outBuf.String()
+	assert.Contains(t, output, "Select a root task")
+	assert.Contains(t, output, "1) Root Task 1")
+	assert.Contains(t, output, "2) Root Task 2")
+	assert.Contains(t, output, "3) Root Task 3")
+}
+
+func TestInitCmd_AutoInit_MultipleRoots_NonTTY(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"init"})
+
+	// Use default stdin (non-TTY in test env)
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple root tasks found")
+	assert.Contains(t, err.Error(), "Root Task 1")
+	assert.Contains(t, err.Error(), "Root Task 2")
+	assert.Contains(t, err.Error(), "Root Task 3")
+	assert.Contains(t, err.Error(), "--parent")
+}
+
+func TestInitCmd_AutoInit_UserCancelsSelection(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"init"})
+
+	// Mock stdin with "q\n" (quit)
+	inputBuf := bytes.NewBufferString("q\n")
+	cmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+func TestInitCmd_AutoInit_InvalidSelection(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"init"})
+
+	// Mock stdin with invalid selection
+	inputBuf := bytes.NewBufferString("99\n")
+	cmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid selection")
 }
