@@ -100,3 +100,22 @@
 - TDD approach: wrote 13 tests first covering status validity, JSON serialization, and all validation error cases
 
 **Outcome**: Success - all 13 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: task-store-interface (TaskStore Interface)
+
+**What changed:**
+- Defined `Store` interface in `internal/taskstore/store.go` with all required CRUD methods
+- Implemented `NotFoundError` type that wraps `ErrNotFound` sentinel with task ID
+- Implemented `ValidationError` type that wraps `ErrValidation` sentinel with task ID and reason
+- Both error types implement `Unwrap()` for use with `errors.Is()` and `errors.As()`
+
+**Files touched:**
+- `internal/taskstore/store.go` (new)
+- `internal/taskstore/store_test.go` (new)
+
+**Learnings:**
+- Go error wrapping pattern: define sentinel errors (`var ErrNotFound = errors.New(...)`) and wrap them in typed errors that implement `Unwrap()` returning the sentinel
+- Use `errors.Join()` in tests to verify that `errors.Is()` and `errors.As()` work through wrapped error chains
+- Interface naming: using `Store` instead of `TaskStore` since the package is already `taskstore`, avoiding stutter (`taskstore.TaskStore` vs `taskstore.Store`)
+
+**Outcome**: Success - all 16 tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

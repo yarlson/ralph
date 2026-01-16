@@ -199,7 +199,7 @@ tasks:
       - Save(task *Task) error
       - UpdateStatus(id string, status TaskStatus) error
       - Delete(id string) error
-    status: open
+    status: completed
     acceptance:
       - "Interface defined with all methods"
       - "Error types for NotFound, ValidationError"
