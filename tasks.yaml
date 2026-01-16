@@ -278,7 +278,7 @@ tasks:
     description: |
       Merge config-level and task-level verify commands in
       internal/loop/controller.go. Run both sets of commands.
-    status: open
+    status: completed
     acceptance:
       - "Both config and task verification commands execute"
       - "All must pass for iteration to succeed"

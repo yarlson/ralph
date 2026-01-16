@@ -119,6 +119,7 @@ type Controller struct {
 	maxRetries             int
 	maxVerificationRetries int
 	taskAttempts           map[string]int // tracks attempt count per task ID
+	configVerifyCommands   [][]string     // global verification commands from config
 }
 
 // NewController creates a new loop controller with the given dependencies.
@@ -158,6 +159,11 @@ func (c *Controller) SetMaxRetries(maxRetries int) {
 // SetMaxVerificationRetries sets the maximum number of verification retries within an iteration.
 func (c *Controller) SetMaxVerificationRetries(maxVerificationRetries int) {
 	c.maxVerificationRetries = maxVerificationRetries
+}
+
+// SetConfigVerifyCommands sets the global verification commands from config.
+func (c *Controller) SetConfigVerifyCommands(commands [][]string) {
+	c.configVerifyCommands = commands
 }
 
 // checkPaused checks if the loop has been paused by reading the pause flag file.
@@ -436,10 +442,14 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	verificationPassed := false
 	verificationAttempt := 1
 
-	if len(task.Verify) > 0 {
+	// Merge config-level and task-level verification commands
+	// Config commands run first (typecheck/lint), then task commands (tests)
+	verifyCommands := c.mergeVerificationCommands(task.Verify)
+
+	if len(verifyCommands) > 0 {
 		for verificationAttempt <= c.maxVerificationRetries+1 {
 			// Run verification
-			results, err = c.verifier.Verify(ctx, task.Verify)
+			results, err = c.verifier.Verify(ctx, verifyCommands)
 			if err != nil {
 				record.Complete(OutcomeFailed)
 				record.SetFeedback(fmt.Sprintf("Verification error: %v", err))
@@ -539,6 +549,26 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 
 	record.Complete(OutcomeSuccess)
 	return record
+}
+
+// mergeVerificationCommands merges config-level and task-level verification commands.
+// Config commands run first (typecheck/lint), then task-specific commands (tests).
+func (c *Controller) mergeVerificationCommands(taskVerify [][]string) [][]string {
+	// If no config commands, just return task commands
+	if len(c.configVerifyCommands) == 0 {
+		return taskVerify
+	}
+
+	// If no task commands, just return config commands
+	if len(taskVerify) == 0 {
+		return c.configVerifyCommands
+	}
+
+	// Merge: config commands first, then task commands
+	merged := make([][]string, 0, len(c.configVerifyCommands)+len(taskVerify))
+	merged = append(merged, c.configVerifyCommands...)
+	merged = append(merged, taskVerify...)
+	return merged
 }
 
 // buildPrompt constructs the prompt for Claude using the full iteration prompt builder.

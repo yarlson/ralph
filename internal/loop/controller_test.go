@@ -134,13 +134,17 @@ func (m *mockClaudeRunner) Run(ctx context.Context, req claude.ClaudeRequest) (*
 
 // mockVerifier implements verifier.Verifier for testing.
 type mockVerifier struct {
-	results []verifier.VerificationResult
-	err     error
-	calls   int
+	results  []verifier.VerificationResult
+	err      error
+	calls    int
+	verifyFn func(ctx context.Context, commands [][]string) ([]verifier.VerificationResult, error)
 }
 
 func (m *mockVerifier) Verify(ctx context.Context, commands [][]string) ([]verifier.VerificationResult, error) {
 	m.calls++
+	if m.verifyFn != nil {
+		return m.verifyFn(ctx, commands)
+	}
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -1053,3 +1057,190 @@ func TestController_RunLoop_ChecksPauseBetweenIterations(t *testing.T) {
 	// child2 should still be open
 	assert.Equal(t, taskstore.StatusOpen, store.tasks["child2"].Status)
 }
+
+func TestController_MergeVerificationCommands_NoConfigCommands(t *testing.T) {
+	store := newMockTaskStore()
+	deps := ControllerDeps{
+		TaskStore: store,
+		Claude:    &mockClaudeRunner{},
+		Verifier:  &mockVerifier{},
+		Git:       &mockGitManager{},
+		LogsDir:   t.TempDir(),
+	}
+
+	ctrl := NewController(deps)
+	taskCommands := [][]string{{"go", "test", "./..."}}
+
+	merged := ctrl.mergeVerificationCommands(taskCommands)
+
+	assert.Equal(t, taskCommands, merged)
+}
+
+func TestController_MergeVerificationCommands_NoTaskCommands(t *testing.T) {
+	store := newMockTaskStore()
+	deps := ControllerDeps{
+		TaskStore: store,
+		Claude:    &mockClaudeRunner{},
+		Verifier:  &mockVerifier{},
+		Git:       &mockGitManager{},
+		LogsDir:   t.TempDir(),
+	}
+
+	ctrl := NewController(deps)
+	configCommands := [][]string{{"golangci-lint", "run"}}
+	ctrl.SetConfigVerifyCommands(configCommands)
+
+	merged := ctrl.mergeVerificationCommands(nil)
+
+	assert.Equal(t, configCommands, merged)
+}
+
+func TestController_MergeVerificationCommands_BothPresent(t *testing.T) {
+	store := newMockTaskStore()
+	deps := ControllerDeps{
+		TaskStore: store,
+		Claude:    &mockClaudeRunner{},
+		Verifier:  &mockVerifier{},
+		Git:       &mockGitManager{},
+		LogsDir:   t.TempDir(),
+	}
+
+	ctrl := NewController(deps)
+	configCommands := [][]string{
+		{"golangci-lint", "run"},
+		{"go", "build", "./..."},
+	}
+	taskCommands := [][]string{{"go", "test", "./..."}}
+	ctrl.SetConfigVerifyCommands(configCommands)
+
+	merged := ctrl.mergeVerificationCommands(taskCommands)
+
+	expected := [][]string{
+		{"golangci-lint", "run"},
+		{"go", "build", "./..."},
+		{"go", "test", "./..."},
+	}
+	assert.Equal(t, expected, merged)
+}
+
+func TestController_RunIteration_WithConfigVerifyCommands(t *testing.T) {
+	store := newMockTaskStore()
+	task := newTestTask("task1", "Test Task", taskstore.StatusOpen, nil)
+	task.Verify = [][]string{{"go", "test", "./..."}}
+	store.addTask(task)
+
+	// Track which commands were executed
+	var executedCommands [][]string
+	verifierMock := &mockVerifier{
+		results: []verifier.VerificationResult{
+			{Passed: true, Command: []string{"golangci-lint", "run"}},
+			{Passed: true, Command: []string{"go", "test", "./..."}},
+		},
+		verifyFn: func(ctx context.Context, commands [][]string) ([]verifier.VerificationResult, error) {
+			executedCommands = commands
+			return []verifier.VerificationResult{
+				{Passed: true, Command: []string{"golangci-lint", "run"}},
+				{Passed: true, Command: []string{"go", "test", "./..."}},
+			}, nil
+		},
+	}
+
+	claudeMock := &mockClaudeRunner{
+		response: &claude.ClaudeResponse{
+			SessionID: "session123",
+			Model:     "claude-sonnet-4-5",
+			FinalText: "Changes made",
+			Usage: claude.ClaudeUsage{
+				InputTokens:  100,
+				OutputTokens: 200,
+			},
+			TotalCostUSD: 0.05,
+		},
+	}
+
+	gitMock := &mockGitManager{
+		currentCommit: "abc123",
+		hasChanges:    true,
+		changedFiles:  []string{"file1.go"},
+		commitHash:    "def456",
+	}
+
+	deps := ControllerDeps{
+		TaskStore: store,
+		Claude:    claudeMock,
+		Verifier:  verifierMock,
+		Git:       gitMock,
+		LogsDir:   t.TempDir(),
+	}
+
+	ctrl := NewController(deps)
+	configCommands := [][]string{{"golangci-lint", "run"}}
+	ctrl.SetConfigVerifyCommands(configCommands)
+
+	record := ctrl.runIteration(context.Background(), task)
+
+	// Should have merged config and task commands
+	assert.Equal(t, OutcomeSuccess, record.Outcome)
+	assert.Len(t, executedCommands, 2)
+	assert.Equal(t, []string{"golangci-lint", "run"}, executedCommands[0])
+	assert.Equal(t, []string{"go", "test", "./..."}, executedCommands[1])
+
+	// Verification outputs should reflect both commands
+	assert.Len(t, record.VerificationOutputs, 2)
+	assert.True(t, record.VerificationOutputs[0].Passed)
+	assert.True(t, record.VerificationOutputs[1].Passed)
+}
+
+func TestController_RunIteration_ConfigVerifyFails(t *testing.T) {
+	store := newMockTaskStore()
+	task := newTestTask("task1", "Test Task", taskstore.StatusOpen, nil)
+	task.Verify = [][]string{{"go", "test", "./..."}}
+	store.addTask(task)
+
+	// Config command fails, task command passes
+	verifierMock := &mockVerifier{
+		results: []verifier.VerificationResult{
+			{Passed: false, Command: []string{"golangci-lint", "run"}, Output: "linter errors"},
+			{Passed: true, Command: []string{"go", "test", "./..."}},
+		},
+	}
+
+	claudeMock := &mockClaudeRunner{
+		response: &claude.ClaudeResponse{
+			SessionID: "session123",
+			Model:     "claude-sonnet-4-5",
+			FinalText: "Changes made",
+			Usage: claude.ClaudeUsage{
+				InputTokens:  100,
+				OutputTokens: 200,
+			},
+			TotalCostUSD: 0.05,
+		},
+	}
+
+	gitMock := &mockGitManager{
+		currentCommit: "abc123",
+		hasChanges:    true,
+		changedFiles:  []string{"file1.go"},
+	}
+
+	deps := ControllerDeps{
+		TaskStore: store,
+		Claude:    claudeMock,
+		Verifier:  verifierMock,
+		Git:       gitMock,
+		LogsDir:   t.TempDir(),
+	}
+
+	ctrl := NewController(deps)
+	configCommands := [][]string{{"golangci-lint", "run"}}
+	ctrl.SetConfigVerifyCommands(configCommands)
+
+	record := ctrl.runIteration(context.Background(), task)
+
+	// Should fail because config command failed
+	assert.Equal(t, OutcomeFailed, record.Outcome)
+	assert.Len(t, record.VerificationOutputs, 2)
+	assert.False(t, record.VerificationOutputs[0].Passed)
+}
+

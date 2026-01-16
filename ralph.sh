@@ -37,30 +37,42 @@ supports_color() {
 }
 
 if supports_color; then
+    COLORS="$(tput colors 2>/dev/null || echo 0)"
     C_RESET="$(tput sgr0)"
     C_BOLD="$(tput bold)"
     C_DIM="$(tput dim)"
-    C_RED="$(tput setaf 1)"
-    C_GREEN="$(tput setaf 2)"
-    C_YELLOW="$(tput setaf 3)"
-    C_PURPLE="$(tput setaf 5)"
-    C_CYAN="$(tput setaf 6)"
+    if [[ "$COLORS" =~ ^[0-9]+$ ]] && [ "$COLORS" -ge 256 ]; then
+        C_ERROR="$(tput setaf 211)"
+        C_SUCCESS="$(tput setaf 150)"
+        C_WARN="$(tput setaf 215)"
+        C_PRIMARY="$(tput setaf 80)"
+        C_ACCENT="$(tput setaf 141)"
+        C_INFO="$(tput setaf 147)"
+    else
+        C_ERROR="$(tput setaf 1)"
+        C_SUCCESS="$(tput setaf 2)"
+        C_WARN="$(tput setaf 3)"
+        C_PRIMARY="$(tput setaf 6)"
+        C_ACCENT="$(tput setaf 5)"
+        C_INFO="$(tput setaf 4)"
+    fi
 else
     C_RESET=""
     C_BOLD=""
     C_DIM=""
-    C_RED=""
-    C_GREEN=""
-    C_YELLOW=""
-    C_PURPLE=""
-    C_CYAN=""
+    C_ERROR=""
+    C_SUCCESS=""
+    C_WARN=""
+    C_PRIMARY=""
+    C_ACCENT=""
+    C_INFO=""
 fi
 
 format_markdown() {
-    C_BOLD="$C_BOLD" C_PURPLE="$C_PURPLE" C_RESET="$C_RESET" perl -pe '
+    C_BOLD="$C_BOLD" C_ACCENT="$C_ACCENT" C_RESET="$C_RESET" perl -pe '
         BEGIN {
             $cb = $ENV{C_BOLD} // "";
-            $cp = $ENV{C_PURPLE} // "";
+            $cp = $ENV{C_ACCENT} // "";
             $cr = $ENV{C_RESET} // "";
         }
         s/\*\*([^*]+)\*\*/$cb$1$cr/g;
@@ -101,7 +113,7 @@ banner() {
 
     printf '\n%s%s%s\n' "${C_DIM}" "$line" "${C_RESET}"
     printf '  %s%s%s %s%s%s%s%s%s\n' \
-        "${color}${C_BOLD}" "RALPH" "${C_RESET}" \
+        "${C_PRIMARY}${C_BOLD}" "RALPH" "${C_RESET}" \
         "${color}${C_BOLD}" "$title" "${C_RESET}" \
         "$spaces" \
         "${C_DIM}" "$right" "${C_RESET}"
@@ -125,7 +137,7 @@ while :; do
     run_id=$((run_id + 1))
     SECONDS=0
 
-    banner "${C_CYAN}" "Starting task run #${run_id}" "Streaming assistant output below…"
+    banner "${C_INFO}" "Starting task run #${run_id}" "Streaming assistant output below…"
 
     tmp="$(mktemp -t ralph_ndjson.XXXXXX)"
 
@@ -145,7 +157,7 @@ while :; do
 
     rc="${PIPESTATUS[0]}"
     if [ "$rc" -ne 0 ]; then
-        banner "${C_RED}" "Claude failed (exit code ${rc})" "Aborting."
+        banner "${C_ERROR}" "Claude failed (exit code ${rc})" "Aborting."
         rm -f "$tmp"
         exit "$rc"
     fi
@@ -157,7 +169,7 @@ while :; do
     elapsed="$SECONDS"
     elapsed_fmt="$(fmt_duration "$elapsed")"
 
-    banner "${C_GREEN}" "Finished task run #${run_id}" "Time taken: ${elapsed_fmt}"
+    banner "${C_SUCCESS}" "Finished task run #${run_id}" "Time taken: ${elapsed_fmt}"
 
     if [ "$status" = "RALPH_DONE" ]; then
         say "All tasks are complete. The project is finished."
@@ -165,7 +177,7 @@ while :; do
     fi
 
     if [ "$status" = "RALPH_BLOCKED" ]; then
-        printf '%sRalph is blocked%s (no ready tasks). Review dependencies in tasks.yaml.\n' "${C_YELLOW}${C_BOLD}" "${C_RESET}" >&2
+        printf '%sRalph is blocked%s (no ready tasks). Review dependencies in tasks.yaml.\n' "${C_WARN}${C_BOLD}" "${C_RESET}" >&2
         say "Ralph is blocked. No ready tasks."
         exit 2
     fi

@@ -1344,3 +1344,37 @@
 
 **Outcome**: Success - all tests pass (go test ./...), feature fully implemented with config support, in-iteration retry loop functional
 
+### 2026-01-16: ralph-align-config-verify (Use Config-Level Verification Commands)
+
+**What changed:**
+
+- Added `configVerifyCommands [][]string` field to Controller struct to hold global verification commands from config
+- Implemented `SetConfigVerifyCommands(commands [][]string)` method to configure global verification commands
+- Implemented `mergeVerificationCommands(taskVerify [][]string)` helper method that:
+  - Returns task commands if no config commands are set
+  - Returns config commands if no task commands are set
+  - Merges both by prepending config commands before task commands when both are present
+- Modified `runIteration()` to call `mergeVerificationCommands()` before running verification
+- Updated `cmd/run.go` to call `controller.SetConfigVerifyCommands(cfg.Verification.Commands)` during controller configuration
+- Added comprehensive tests: `TestController_MergeVerificationCommands_*`, `TestController_RunIteration_WithConfigVerifyCommands`, `TestController_RunIteration_ConfigVerifyFails`
+- Enhanced `mockVerifier` to support `verifyFn` callback for tracking executed commands in tests
+
+**Files touched:**
+
+- `internal/loop/controller.go` (added configVerifyCommands field, SetConfigVerifyCommands method, mergeVerificationCommands helper)
+- `cmd/run.go` (added SetConfigVerifyCommands call)
+- `internal/loop/controller_test.go` (added verifyFn to mockVerifier, added 5 new tests)
+- `tasks.yaml` (marked ralph-align-config-verify as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- Config-level verification commands run before task-level commands - this allows global checks (typecheck, lint) to run before task-specific tests
+- The merge order is important: config commands first, then task commands - ensures global checks like linting happen before running expensive tests
+- Both config and task verification must pass for iteration to succeed - any failure in either set fails the iteration
+- Config verification commands are optional - if not specified in config, only task-level verification runs
+- The `mergeVerificationCommands` pattern uses Go's `make()` with capacity hint for efficient slice allocation: `make([][]string, 0, len(a)+len(b))`
+- Tests need proper Claude response mocks with all required fields (SessionID, Model, Usage, TotalCostUSD) to avoid nil pointer dereferences
+
+**Outcome**: Success - all acceptance criteria met: both config and task commands execute, all must pass, clear output showing which failed, config commands optional
+
