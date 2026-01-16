@@ -415,7 +415,7 @@ tasks:
       Modify cmd/init.go to call memoryManager.ArchiveProgress when setting
       new parent task different from previous.
       Store previous parent ID in state to detect changes.
-    status: open
+    status: completed
     acceptance:
       - "Old progress moved to .ralph/archive/progress-TIMESTAMP.md"
       - "New progress.md created with header"

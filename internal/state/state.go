@@ -90,6 +90,39 @@ func PausedFilePath(root string) string {
 	return filepath.Join(root, RalphDir, StateDir, PausedFile)
 }
 
+// ParentTaskIDFilePath returns the path to the stored parent task ID file in state dir.
+func ParentTaskIDFilePath(root string) string {
+	return filepath.Join(root, RalphDir, StateDir, "parent-task-id")
+}
+
+// GetStoredParentTaskID reads the stored parent task ID from state.
+// Returns empty string if the file doesn't exist.
+func GetStoredParentTaskID(root string) (string, error) {
+	path := ParentTaskIDFilePath(root)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("reading stored parent task ID: %w", err)
+	}
+	return string(data), nil
+}
+
+// SetStoredParentTaskID writes the parent task ID to state.
+func SetStoredParentTaskID(root string, taskID string) error {
+	stateDir := StateDirPath(root)
+	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
+		return fmt.Errorf(".ralph/state directory does not exist")
+	}
+
+	path := ParentTaskIDFilePath(root)
+	if err := os.WriteFile(path, []byte(taskID), 0644); err != nil {
+		return fmt.Errorf("writing stored parent task ID: %w", err)
+	}
+	return nil
+}
+
 // IsPaused checks if the loop is currently paused.
 func IsPaused(root string) (bool, error) {
 	stateDir := StateDirPath(root)

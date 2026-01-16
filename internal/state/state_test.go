@@ -226,3 +226,67 @@ func TestSetPaused(t *testing.T) {
 		assert.True(t, paused)
 	})
 }
+
+func TestGetStoredParentTaskID(t *testing.T) {
+	t.Run("returns empty string when file doesn't exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		taskID, err := GetStoredParentTaskID(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "", taskID)
+	})
+
+	t.Run("reads stored parent task ID", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		// Write a task ID
+		require.NoError(t, SetStoredParentTaskID(tmpDir, "task-123"))
+
+		// Read it back
+		taskID, err := GetStoredParentTaskID(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "task-123", taskID)
+	})
+}
+
+func TestSetStoredParentTaskID(t *testing.T) {
+	t.Run("returns error when state dir does not exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		err := SetStoredParentTaskID(tmpDir, "task-123")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), ".ralph/state")
+	})
+
+	t.Run("writes parent task ID to state file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		err := SetStoredParentTaskID(tmpDir, "my-task")
+		require.NoError(t, err)
+
+		// Verify file was written
+		path := ParentTaskIDFilePath(tmpDir)
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, "my-task", string(data))
+	})
+
+	t.Run("overwrites existing task ID", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, EnsureRalphDir(tmpDir))
+
+		// Write first ID
+		require.NoError(t, SetStoredParentTaskID(tmpDir, "task-1"))
+
+		// Overwrite with second ID
+		require.NoError(t, SetStoredParentTaskID(tmpDir, "task-2"))
+
+		// Verify second ID is stored
+		taskID, err := GetStoredParentTaskID(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "task-2", taskID)
+	})
+}

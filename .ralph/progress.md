@@ -1715,3 +1715,31 @@
 - Passing nil for optional dependencies in tests is idiomatic when those dependencies aren't being tested
 
 **Outcome**: Success - all tests pass (go test ./...), task verification passes (go test ./internal/git/..., go test ./internal/reporter/...)
+
+### 2026-01-16: ralph-align-archive-progress (Archive Old Progress on Feature Switch)
+
+**What changed:**
+
+- Added `GetStoredParentTaskID` and `SetStoredParentTaskID` functions to `internal/state/state.go` to track parent task ID changes in `.ralph/state/parent-task-id`
+- Modified `cmd/init.go` to detect parent task ID changes and archive old progress files
+- When parent task changes: archives existing progress.md to `.ralph/archive/progress-TIMESTAMP.md` and creates new progress.md with fresh header
+- When parent task stays the same: no archiving occurs
+- On first initialization: creates progress.md if it doesn't exist
+
+**Files touched:**
+
+- `internal/state/state.go` (added parent task ID state functions)
+- `internal/state/state_test.go` (added tests for new functions)
+- `cmd/init.go` (added archive logic on parent task change)
+- `cmd/init_test.go` (added tests for archiving behavior)
+- `tasks.yaml` (marked task as completed)
+
+**Learnings:**
+
+- State files should be stored in `.ralph/state/` directory for session-level data
+- The config file already has `parent_id_file` at `.ralph/parent-task-id` for compatibility, but state tracking uses `.ralph/state/parent-task-id`
+- Progress archive uses `memory.NewProgressArchive` and `archive.Archive()` which handles timestamping and collision avoidance
+- Progress file initialization uses `memory.NewProgressFile` and `Init()` method to create header with feature name and parent task ID
+- Archive only happens when parent ID changes (not on same-parent re-init)
+
+**Outcome**: Success - all tests pass, go build succeeds

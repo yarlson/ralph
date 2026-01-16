@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yarlson/go-ralph/internal/config"
+	"github.com/yarlson/go-ralph/internal/memory"
 	"github.com/yarlson/go-ralph/internal/selector"
 	"github.com/yarlson/go-ralph/internal/state"
 	"github.com/yarlson/go-ralph/internal/taskstore"
@@ -127,7 +128,53 @@ func runInit(cmd *cobra.Command, parentID, searchTerm string) error {
 		return fmt.Errorf("no ready leaf tasks found under parent %q", resolvedID)
 	}
 
-	// Write parent-task-id file
+	// Check if parent task has changed
+	previousParentID, err := state.GetStoredParentTaskID(workDir)
+	if err != nil {
+		return fmt.Errorf("failed to get stored parent task ID: %w", err)
+	}
+
+	// If parent task changed and we have a progress file, archive it
+	if previousParentID != "" && previousParentID != resolvedID {
+		progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
+		progressFile := memory.NewProgressFile(progressPath)
+
+		if progressFile.Exists() {
+			archiveDir := filepath.Join(workDir, cfg.Memory.ArchiveDir)
+			archive := memory.NewProgressArchive(archiveDir)
+
+			archivedPath, err := archive.Archive(progressPath)
+			if err != nil {
+				return fmt.Errorf("failed to archive progress file: %w", err)
+			}
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Archived old progress to: %s\n", archivedPath)
+		}
+
+		// Create new progress file with header
+		if err := progressFile.Init(parentTask.Title, resolvedID); err != nil {
+			return fmt.Errorf("failed to initialize progress file: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created new progress file for feature: %s\n", parentTask.Title)
+	} else if previousParentID == "" {
+		// First time initialization - create progress file if it doesn't exist
+		progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
+		progressFile := memory.NewProgressFile(progressPath)
+
+		if !progressFile.Exists() {
+			if err := progressFile.Init(parentTask.Title, resolvedID); err != nil {
+				return fmt.Errorf("failed to initialize progress file: %w", err)
+			}
+		}
+	}
+
+	// Store the new parent task ID in state
+	if err := state.SetStoredParentTaskID(workDir, resolvedID); err != nil {
+		return fmt.Errorf("failed to store parent task ID: %w", err)
+	}
+
+	// Write parent-task-id file (for compatibility)
 	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
 	if err := os.MkdirAll(filepath.Dir(parentIDFile), 0755); err != nil {
 		return fmt.Errorf("failed to create parent directory for parent-task-id: %w", err)

@@ -380,6 +380,142 @@ func TestInitCommand(t *testing.T) {
 		err = cmd.Execute()
 		require.NoError(t, err)
 	})
+
+	t.Run("archives progress when parent task changes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
+		require.NoError(t, err)
+
+		// Create first parent task
+		parentTask1 := createValidParentTask("feature-1", "Feature One")
+		require.NoError(t, store.Save(parentTask1))
+		leafTask1 := createValidLeafTask("leaf-1", "Leaf 1", strPtr("feature-1"))
+		require.NoError(t, store.Save(leafTask1))
+
+		// Initialize with first parent
+		cmd1 := NewRootCmd()
+		cmd1.SetArgs([]string{"init", "--parent", "feature-1"})
+
+		oldWd, _ := os.Getwd()
+		require.NoError(t, os.Chdir(tmpDir))
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		err = cmd1.Execute()
+		require.NoError(t, err)
+
+		// Verify progress file was created
+		progressPath := filepath.Join(tmpDir, ".ralph", "progress.md")
+		require.FileExists(t, progressPath)
+
+		// Add some content to progress file
+		originalContent := "# Some progress content\n"
+		err = os.WriteFile(progressPath, []byte(originalContent), 0644)
+		require.NoError(t, err)
+
+		// Create second parent task
+		parentTask2 := createValidParentTask("feature-2", "Feature Two")
+		require.NoError(t, store.Save(parentTask2))
+		leafTask2 := createValidLeafTask("leaf-2", "Leaf 2", strPtr("feature-2"))
+		require.NoError(t, store.Save(leafTask2))
+
+		// Initialize with second parent (should archive old progress)
+		cmd2 := NewRootCmd()
+		cmd2.SetArgs([]string{"init", "--parent", "feature-2"})
+
+		err = cmd2.Execute()
+		require.NoError(t, err)
+
+		// Verify old progress was archived
+		archiveDir := filepath.Join(tmpDir, ".ralph", "archive")
+		entries, err := os.ReadDir(archiveDir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "expected one archived progress file")
+		assert.Contains(t, entries[0].Name(), "progress-")
+		assert.Contains(t, entries[0].Name(), ".md")
+
+		// Verify archived content
+		archivedPath := filepath.Join(archiveDir, entries[0].Name())
+		archivedContent, err := os.ReadFile(archivedPath)
+		require.NoError(t, err)
+		assert.Equal(t, originalContent, string(archivedContent))
+
+		// Verify new progress file was created
+		require.FileExists(t, progressPath)
+		newContent, err := os.ReadFile(progressPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(newContent), "Feature Two")
+		assert.Contains(t, string(newContent), "feature-2")
+	})
+
+	t.Run("does not archive progress when parent task stays the same", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
+		require.NoError(t, err)
+
+		parentTask := createValidParentTask("feature-x", "Feature X")
+		require.NoError(t, store.Save(parentTask))
+		leafTask := createValidLeafTask("leaf-x", "Leaf X", strPtr("feature-x"))
+		require.NoError(t, store.Save(leafTask))
+
+		oldWd, _ := os.Getwd()
+		require.NoError(t, os.Chdir(tmpDir))
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		// Initialize first time
+		cmd1 := NewRootCmd()
+		cmd1.SetArgs([]string{"init", "--parent", "feature-x"})
+		err = cmd1.Execute()
+		require.NoError(t, err)
+
+		progressPath := filepath.Join(tmpDir, ".ralph", "progress.md")
+		require.FileExists(t, progressPath)
+
+		// Initialize again with same parent
+		cmd2 := NewRootCmd()
+		cmd2.SetArgs([]string{"init", "--parent", "feature-x"})
+		err = cmd2.Execute()
+		require.NoError(t, err)
+
+		// Verify no archive was created
+		archiveDir := filepath.Join(tmpDir, ".ralph", "archive")
+		entries, err := os.ReadDir(archiveDir)
+		require.NoError(t, err)
+		assert.Len(t, entries, 0, "expected no archived progress files")
+	})
+
+	t.Run("creates progress file on first init", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
+		require.NoError(t, err)
+
+		parentTask := createValidParentTask("initial-feature", "Initial Feature")
+		require.NoError(t, store.Save(parentTask))
+		leafTask := createValidLeafTask("initial-leaf", "Initial Leaf", strPtr("initial-feature"))
+		require.NoError(t, store.Save(leafTask))
+
+		oldWd, _ := os.Getwd()
+		require.NoError(t, os.Chdir(tmpDir))
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		cmd := NewRootCmd()
+		cmd.SetArgs([]string{"init", "--parent", "initial-feature"})
+		err = cmd.Execute()
+		require.NoError(t, err)
+
+		// Verify progress file was created
+		progressPath := filepath.Join(tmpDir, ".ralph", "progress.md")
+		require.FileExists(t, progressPath)
+
+		content, err := os.ReadFile(progressPath)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "Initial Feature")
+		assert.Contains(t, string(content), "initial-feature")
+		assert.Contains(t, string(content), "## Codebase Patterns")
+		assert.Contains(t, string(content), "## Iteration Log")
+	})
 }
 
 // strPtr is a helper to create string pointers
