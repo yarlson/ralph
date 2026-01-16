@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -794,18 +795,31 @@ func TestController_RunLoop_WithDependencyGraph(t *testing.T) {
 
 // dynamicGitManager is a git manager that allows customizing behavior per call.
 type dynamicGitManager struct {
-	getChangedFilesFn func() []string
+	getChangedFilesFn  func() []string
+	ensureBranchFn     func(ctx context.Context, branchName string) error
+	getCurrentCommitFn func(ctx context.Context) (string, error)
+	hasChangesFn       func(ctx context.Context) (bool, error)
+	commitFn           func(ctx context.Context, message string) (string, error)
 }
 
 func (m *dynamicGitManager) EnsureBranch(ctx context.Context, branchName string) error {
+	if m.ensureBranchFn != nil {
+		return m.ensureBranchFn(ctx, branchName)
+	}
 	return nil
 }
 
 func (m *dynamicGitManager) GetCurrentCommit(ctx context.Context) (string, error) {
+	if m.getCurrentCommitFn != nil {
+		return m.getCurrentCommitFn(ctx)
+	}
 	return "abc123", nil
 }
 
 func (m *dynamicGitManager) HasChanges(ctx context.Context) (bool, error) {
+	if m.hasChangesFn != nil {
+		return m.hasChangesFn(ctx)
+	}
 	return true, nil
 }
 
@@ -821,6 +835,9 @@ func (m *dynamicGitManager) GetChangedFiles(ctx context.Context) ([]string, erro
 }
 
 func (m *dynamicGitManager) Commit(ctx context.Context, message string) (string, error) {
+	if m.commitFn != nil {
+		return m.commitFn(ctx, message)
+	}
 	return "def456", nil
 }
 
@@ -852,8 +869,9 @@ func TestController_RunLoop_InvalidParentTask(t *testing.T) {
 	ctrl := NewController(deps)
 	result := ctrl.RunLoop(context.Background(), "nonexistent")
 
-	// When parent doesn't exist and there are no tasks, it's "completed" (nothing to do)
-	assert.Equal(t, RunOutcomeCompleted, result.Outcome)
+	// When parent doesn't exist, ensureFeatureBranch fails early with an error
+	assert.Equal(t, RunOutcomeError, result.Outcome)
+	assert.Contains(t, result.Message, "failed to ensure feature branch")
 	assert.Equal(t, 0, result.IterationsRun)
 }
 
@@ -1344,6 +1362,13 @@ func TestController_RunLoop_IterationTimeoutFromConfig(t *testing.T) {
 		commitHash:    "def456",
 	}
 
+	parentTask := &taskstore.Task{
+		ID:          "parent1",
+		Title:       "Parent Task",
+		Description: "Parent task",
+		Status:      taskstore.StatusOpen,
+	}
+
 	task := &taskstore.Task{
 		ID:          "task1",
 		ParentID:    strPtr("parent1"),
@@ -1354,6 +1379,7 @@ func TestController_RunLoop_IterationTimeoutFromConfig(t *testing.T) {
 	}
 
 	store := newMockTaskStore()
+	store.addTask(parentTask)
 	store.addTask(task)
 
 	verifierMock := &mockVerifier{
@@ -1385,5 +1411,174 @@ func TestController_RunLoop_IterationTimeoutFromConfig(t *testing.T) {
 	// Should succeed - if timeout wasn't properly set, this would hang
 	assert.Equal(t, RunOutcomeCompleted, result.Outcome)
 	assert.Equal(t, 1, result.IterationsRun)
+}
+
+func TestController_EnsureFeatureBranch_AutoGenerate(t *testing.T) {
+	// Create controller with mocks
+	store := newMockTaskStore()
+	parentTask := newTestTask("parent1", "Feature: My Awesome Feature", taskstore.StatusOpen, nil)
+	store.tasks["parent1"] = parentTask
+
+	var capturedBranch string
+	gitMgr := &dynamicGitManager{
+		ensureBranchFn: func(ctx context.Context, branch string) error {
+			capturedBranch = branch
+			return nil
+		},
+	}
+
+	deps := ControllerDeps{
+		TaskStore: store,
+		Git:       gitMgr,
+	}
+	ctrl := NewController(deps)
+
+	// Call ensureFeatureBranch
+	err := ctrl.ensureFeatureBranch(context.Background(), "parent1")
+
+	// Assert no error and branch name is slugified
+	require.NoError(t, err)
+	assert.Equal(t, "feature-my-awesome-feature", capturedBranch)
+}
+
+func TestController_EnsureFeatureBranch_WithOverride(t *testing.T) {
+	// Create controller with mocks
+	store := newMockTaskStore()
+	parentTask := newTestTask("parent1", "Feature: My Awesome Feature", taskstore.StatusOpen, nil)
+	store.tasks["parent1"] = parentTask
+
+	var capturedBranch string
+	gitMgr := &dynamicGitManager{
+		ensureBranchFn: func(ctx context.Context, branch string) error {
+			capturedBranch = branch
+			return nil
+		},
+	}
+
+	deps := ControllerDeps{
+		TaskStore: store,
+		Git:       gitMgr,
+	}
+	ctrl := NewController(deps)
+	ctrl.SetBranchOverride("custom-branch")
+
+	// Call ensureFeatureBranch
+	err := ctrl.ensureFeatureBranch(context.Background(), "parent1")
+
+	// Assert no error and override is used
+	require.NoError(t, err)
+	assert.Equal(t, "custom-branch", capturedBranch)
+}
+
+func TestController_EnsureFeatureBranch_TaskNotFound(t *testing.T) {
+	// Create controller with empty store
+	store := newMockTaskStore()
+	gitMgr := &mockGitManager{}
+
+	deps := ControllerDeps{
+		TaskStore: store,
+		Git:       gitMgr,
+	}
+	ctrl := NewController(deps)
+
+	// Call ensureFeatureBranch with nonexistent task
+	err := ctrl.ensureFeatureBranch(context.Background(), "nonexistent")
+
+	// Assert error
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get parent task")
+}
+
+func TestController_EnsureFeatureBranch_GitError(t *testing.T) {
+	// Create controller with mocks
+	store := newMockTaskStore()
+	parentTask := newTestTask("parent1", "Feature Name", taskstore.StatusOpen, nil)
+	store.tasks["parent1"] = parentTask
+
+	gitMgr := &dynamicGitManager{
+		ensureBranchFn: func(ctx context.Context, branch string) error {
+			return fmt.Errorf("git error")
+		},
+	}
+
+	deps := ControllerDeps{
+		TaskStore: store,
+		Git:       gitMgr,
+	}
+	ctrl := NewController(deps)
+
+	// Call ensureFeatureBranch
+	err := ctrl.ensureFeatureBranch(context.Background(), "parent1")
+
+	// Assert error
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to ensure branch")
+}
+
+func TestController_RunLoop_EnsuresFeatureBranch(t *testing.T) {
+	// Create controller with mocks
+	store := newMockTaskStore()
+	parentTask := newTestTask("parent1", "My Feature", taskstore.StatusOpen, nil)
+	childTask := newTestTask("child1", "Child Task", taskstore.StatusOpen, strPtr("parent1"))
+	store.tasks["parent1"] = parentTask
+	store.tasks["child1"] = childTask
+
+	var branchEnsured bool
+	var ensuredBranchName string
+	gitMgr := &dynamicGitManager{
+		ensureBranchFn: func(ctx context.Context, branch string) error {
+			branchEnsured = true
+			ensuredBranchName = branch
+			return nil
+		},
+		getCurrentCommitFn: func(ctx context.Context) (string, error) {
+			return "abc123", nil
+		},
+		hasChangesFn: func(ctx context.Context) (bool, error) {
+			return true, nil
+		},
+		getChangedFilesFn: func() []string {
+			return []string{"file.go"}
+		},
+		commitFn: func(ctx context.Context, message string) (string, error) {
+			return "def456", nil
+		},
+	}
+
+	claudeRunner := &mockClaudeRunner{
+		response: &claude.ClaudeResponse{
+			SessionID:    "sess-123",
+			FinalText:    "Done",
+			TotalCostUSD: 0.01,
+		},
+	}
+
+	ver := &mockVerifier{
+		results: []verifier.VerificationResult{
+			{Passed: true, Command: []string{"go", "test"}},
+		},
+	}
+
+	progressFile := memory.NewProgressFile(filepath.Join(t.TempDir(), "progress.md"))
+	_ = progressFile.Init("My Feature", "parent1")
+
+	deps := ControllerDeps{
+		TaskStore:    store,
+		Claude:       claudeRunner,
+		Verifier:     ver,
+		Git:          gitMgr,
+		LogsDir:      t.TempDir(),
+		ProgressFile: progressFile,
+	}
+	ctrl := NewController(deps)
+	ctrl.SetGutterConfig(GutterConfig{}) // Disable gutter detection
+
+	// Run the loop
+	result := ctrl.RunLoop(context.Background(), "parent1")
+
+	// Assert branch was ensured
+	assert.True(t, branchEnsured, "EnsureBranch should have been called")
+	assert.Equal(t, "my-feature", ensuredBranchName)
+	assert.Equal(t, RunOutcomeCompleted, result.Outcome)
 }
 

@@ -349,7 +349,7 @@ tasks:
       Call gitManager.EnsureBranch at start of run in internal/loop/controller.go.
       Generate branch name from parent task: ralph/<parent-task-title-slug>.
       Update ralph init to suggest branch creation.
-    status: open
+    status: completed
     acceptance:
       - "ralph run creates/switches to feature branch"
       - "Branch name format: ralph/<feature-name>"

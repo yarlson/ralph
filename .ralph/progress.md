@@ -1493,3 +1493,51 @@
 
 **Outcome**: Success - all tests pass (go test ./..., go build ./..., golangci-lint run), linter fully integrated into init and import commands
 
+### 2026-01-16: ralph-align-feature-branch (Create and Use Feature Branches)
+
+**What changed:**
+
+- Added `branchOverride` field to Controller struct for optional branch name override
+- Implemented `slugify()` function to convert task titles to branch-safe names (lowercase, hyphens, alphanumeric only)
+- Implemented `SetBranchOverride()` method to allow explicit branch name configuration
+- Implemented `ensureFeatureBranch()` method that:
+  - Uses branch override if set, otherwise generates branch name from parent task title
+  - Calls gitManager.EnsureBranch to create/switch to the feature branch
+  - Errors early if parent task doesn't exist
+- Modified `RunLoop()` to call `ensureFeatureBranch()` at the start before entering the iteration loop
+- Added `--branch` flag to `ralph run` command to allow users to override the auto-generated branch name
+- Updated `cmd/run.go` to call `SetBranchOverride()` when --branch flag is provided
+- Updated existing `dynamicGitManager` test mock to support `ensureBranchFn`, `getCurrentCommitFn`, `hasChangesFn`, and `commitFn` callbacks
+- Created comprehensive test suite with 18+ tests covering:
+  - `slugify()` with various inputs (spaces, special chars, empty strings, real task titles)
+  - `ensureFeatureBranch()` with auto-generation, override, task not found, git errors
+  - `RunLoop()` integration test verifying branch is created before iterations
+- Fixed existing tests that were broken by the new branch creation requirement:
+  - `TestController_RunLoop_InvalidParentTask` - now expects error outcome when parent doesn't exist
+  - `TestController_RunLoop_IterationTimeoutFromConfig` - added parent task to mock store
+  - `TestRunCmd_Integration_NoReadyTasks` - initialized git repo with initial commit and disabled GPG signing
+
+**Files touched:**
+
+- `internal/loop/controller.go` (added slugify, ensureFeatureBranch, branchOverride field, SetBranchOverride method)
+- `internal/loop/slug_test.go` (new - comprehensive slugify tests)
+- `internal/loop/controller_test.go` (added filepath import, updated dynamicGitManager, added 5 new tests, fixed 2 existing tests)
+- `cmd/run.go` (added --branch flag, updated runRun signature, added SetBranchOverride call)
+- `cmd/run_test.go` (added os/exec import, initialized git repo in integration test)
+- `tasks.yaml` (marked ralph-align-feature-branch as completed)
+- `.ralph/progress.md` (this entry)
+
+**Learnings:**
+
+- The branch prefix from config (e.g., "ralph/") is prepended by the git.ShellManager's EnsureBranch method, so we just pass the slug
+- Branch names must be lowercase alphanumeric with hyphens - no spaces, underscores converted to hyphens, special characters removed
+- The `strings.ReplaceAll()` pattern for collapsing multiple hyphens works well with a simple loop
+- EnsureBranch is idempotent - it checks if already on the branch, switches if branch exists, creates if doesn't exist
+- Calling EnsureBranch early in RunLoop (before the main loop) provides better error handling and clearer failure messages
+- The --branch flag allows users to override auto-generation for cases where they want specific branch names
+- Test mocks need to be extended carefully - reusing existing mock types with new callback fields is cleaner than creating duplicates
+- Git integration tests require: `git init`, `git config user.*`, `git config commit.gpgsign false`, and an initial commit before operations
+- When a new requirement affects existing tests, update test expectations rather than working around them - the new behavior is correct
+
+**Outcome**: Success - all tests pass (go test ./..., go build ./..., golangci-lint run), feature branch creation fully integrated, all acceptance criteria met
+

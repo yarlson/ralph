@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -107,6 +108,17 @@ func TestRunCmd_Integration_NoReadyTasks(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(oldWd) }()
 	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repository
+	require.NoError(t, exec.Command("git", "init", "-b", "main").Run())
+	require.NoError(t, exec.Command("git", "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "config", "commit.gpgsign", "false").Run())
+
+	// Create initial commit
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Test"), 0644))
+	require.NoError(t, exec.Command("git", "add", ".").Run())
+	require.NoError(t, exec.Command("git", "commit", "-m", "Initial commit").Run())
 
 	// Create ralph dir structure
 	err = os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755)

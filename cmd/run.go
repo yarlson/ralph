@@ -23,23 +23,25 @@ import (
 func newRunCmd() *cobra.Command {
 	var once bool
 	var maxIterations int
+	var branch string
 
 	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Run the iteration loop",
 		Long:  "Execute the iteration loop until all tasks are done or limits are reached.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRun(cmd, once, maxIterations)
+			return runRun(cmd, once, maxIterations, branch)
 		},
 	}
 
 	cmd.Flags().BoolVar(&once, "once", false, "run only a single iteration")
 	cmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "maximum iterations to run (0 uses config default)")
+	cmd.Flags().StringVar(&branch, "branch", "", "override branch name (default: auto-generate from parent task)")
 
 	return cmd
 }
 
-func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
+func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) error {
 	// Get working directory
 	workDir, err := os.Getwd()
 	if err != nil {
@@ -172,6 +174,11 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int) error {
 
 	// Configure config-level verification commands
 	controller.SetConfigVerifyCommands(cfg.Verification.Commands)
+
+	// Configure branch override if specified
+	if branch != "" {
+		controller.SetBranchOverride(branch)
+	}
 
 	// Set up context with signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

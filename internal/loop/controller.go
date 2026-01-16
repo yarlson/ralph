@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/yarlson/go-ralph/internal/claude"
@@ -120,6 +121,7 @@ type Controller struct {
 	maxVerificationRetries int
 	taskAttempts           map[string]int // tracks attempt count per task ID
 	configVerifyCommands   [][]string     // global verification commands from config
+	branchOverride         string         // optional branch name override
 }
 
 // NewController creates a new loop controller with the given dependencies.
@@ -166,6 +168,50 @@ func (c *Controller) SetConfigVerifyCommands(commands [][]string) {
 	c.configVerifyCommands = commands
 }
 
+// SetBranchOverride sets an optional branch name override instead of auto-generating from task title.
+func (c *Controller) SetBranchOverride(branch string) {
+	c.branchOverride = branch
+}
+
+// slugify converts a string to a branch-safe slug by:
+// - converting to lowercase
+// - replacing spaces and underscores with hyphens
+// - removing non-alphanumeric characters (except hyphens)
+// - collapsing multiple consecutive hyphens
+// - trimming leading/trailing hyphens
+func slugify(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+
+	// Remove invalid characters (keep only a-z, 0-9, and -)
+	var result strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			result.WriteRune(r)
+		}
+	}
+	slug := result.String()
+
+	// Collapse multiple hyphens
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
+
+	// Trim hyphens
+	slug = strings.Trim(slug, "-")
+
+	if slug == "" {
+		return "unknown"
+	}
+
+	return slug
+}
+
 // checkPaused checks if the loop has been paused by reading the pause flag file.
 func (c *Controller) checkPaused() bool {
 	if c.workDir == "" {
@@ -178,6 +224,31 @@ func (c *Controller) checkPaused() bool {
 	return paused
 }
 
+// ensureFeatureBranch ensures the feature branch exists and is checked out.
+// It uses the branch override if set, otherwise generates a branch name from the parent task title.
+func (c *Controller) ensureFeatureBranch(ctx context.Context, parentTaskID string) error {
+	var branchName string
+
+	if c.branchOverride != "" {
+		// Use explicit branch override
+		branchName = c.branchOverride
+	} else {
+		// Generate branch name from parent task title
+		parentTask, err := c.taskStore.Get(parentTaskID)
+		if err != nil {
+			return fmt.Errorf("failed to get parent task: %w", err)
+		}
+		branchName = slugify(parentTask.Title)
+	}
+
+	// Call git manager to ensure branch
+	if err := c.gitManager.EnsureBranch(ctx, branchName); err != nil {
+		return fmt.Errorf("failed to ensure branch: %w", err)
+	}
+
+	return nil
+}
+
 // RunLoop executes the main iteration loop until completion, blocked, or budget exceeded.
 func (c *Controller) RunLoop(ctx context.Context, parentTaskID string) RunResult {
 	startTime := time.Now()
@@ -185,6 +256,14 @@ func (c *Controller) RunLoop(ctx context.Context, parentTaskID string) RunResult
 		CompletedTasks: []string{},
 		FailedTasks:    []string{},
 		Records:        []*IterationRecord{},
+	}
+
+	// Ensure feature branch at start of run
+	if err := c.ensureFeatureBranch(ctx, parentTaskID); err != nil {
+		result.Outcome = RunOutcomeError
+		result.Message = fmt.Sprintf("failed to ensure feature branch: %v", err)
+		result.ElapsedTime = time.Since(startTime)
+		return result
 	}
 
 	for {
