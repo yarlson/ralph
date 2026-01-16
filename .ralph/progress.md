@@ -1656,3 +1656,29 @@
 - Tests must disable oscillation (or set high threshold) when specifically testing file churn to avoid interference
 
 **Outcome**: Success - all tests pass (go test ./...), build succeeds (go build ./...), linter passes (golangci-lint run)
+
+### 2026-01-16: ralph-align-text-logs (Generate Human-Readable Iteration Logs)
+
+**What changed:**
+
+- Implemented `GenerateTextLog()` function in `internal/loop/record.go` to create human-readable text summaries of iteration records
+- Modified `SaveRecord()` to automatically generate and save both JSON and text log files
+- Added text log generation that includes: iteration ID, task ID, start/end times, duration, outcome, base/result commits, files changed, verification results, Claude invocation metadata, feedback, and attempt number
+- Text logs are saved as `.ralph/logs/iteration-<id>.txt` alongside JSON logs
+- Added comprehensive tests for text log generation and file creation
+
+**Files touched:**
+
+- `internal/loop/record.go` (modified - added GenerateTextLog function, updated SaveRecord)
+- `internal/loop/record_test.go` (modified - added TestGenerateTextLog and TestSaveRecord_CreatesTextLog)
+
+**Learnings:**
+
+- Text logs provide human-readable iteration summaries without needing to parse JSON
+- JSON remains the source of truth; text log write failures are non-fatal warnings
+- Text format includes all key metrics: timing, outcome, file changes, verification status
+- Using strings.Builder for efficient string concatenation in log generation
+- Verification outputs show as "PASS/FAIL" with command duration when available
+- Claude metadata (model, session ID, cost, token counts) included when present
+
+**Outcome**: Success - all tests pass (go test ./...), task verification passes (go test ./internal/loop/...)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,8 +160,100 @@ func GenerateIterationID() string {
 	return uuid.New().String()[:8]
 }
 
+// GenerateTextLog generates a human-readable text summary of an iteration record.
+func GenerateTextLog(record *IterationRecord) string {
+	if record == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString(fmt.Sprintf("Iteration: %s\n", record.IterationID))
+	sb.WriteString(fmt.Sprintf("Task: %s\n", record.TaskID))
+
+	// Timing
+	if !record.StartTime.IsZero() {
+		sb.WriteString(fmt.Sprintf("Start Time: %s\n", record.StartTime.Format(time.RFC3339)))
+	}
+	if !record.EndTime.IsZero() {
+		sb.WriteString(fmt.Sprintf("End Time: %s\n", record.EndTime.Format(time.RFC3339)))
+	}
+	if duration := record.Duration(); duration > 0 {
+		sb.WriteString(fmt.Sprintf("Duration: %s\n", duration))
+	}
+
+	// Outcome
+	sb.WriteString(fmt.Sprintf("Outcome: %s\n", record.Outcome))
+
+	// Commits
+	if record.BaseCommit != "" {
+		sb.WriteString(fmt.Sprintf("Base Commit: %s\n", record.BaseCommit))
+	}
+	if record.ResultCommit != "" {
+		sb.WriteString(fmt.Sprintf("Commit: %s\n", record.ResultCommit))
+	}
+
+	// Files changed
+	if len(record.FilesChanged) > 0 {
+		sb.WriteString("\nFiles Changed:\n")
+		for _, file := range record.FilesChanged {
+			sb.WriteString(fmt.Sprintf("  - %s\n", file))
+		}
+	}
+
+	// Verification results
+	if len(record.VerificationOutputs) > 0 {
+		sb.WriteString("\nVerification Results:\n")
+		for _, vo := range record.VerificationOutputs {
+			status := "PASS"
+			if !vo.Passed {
+				status = "FAIL"
+			}
+			cmdStr := strings.Join(vo.Command, " ")
+			sb.WriteString(fmt.Sprintf("  - %s - %s\n", cmdStr, status))
+			if vo.Duration > 0 {
+				sb.WriteString(fmt.Sprintf("    Duration: %s\n", vo.Duration))
+			}
+		}
+	}
+
+	// Claude invocation metadata
+	if record.ClaudeInvocation.Model != "" || record.ClaudeInvocation.SessionID != "" {
+		sb.WriteString("\nClaude Invocation:\n")
+		if record.ClaudeInvocation.Model != "" {
+			sb.WriteString(fmt.Sprintf("  Model: %s\n", record.ClaudeInvocation.Model))
+		}
+		if record.ClaudeInvocation.SessionID != "" {
+			sb.WriteString(fmt.Sprintf("  Session ID: %s\n", record.ClaudeInvocation.SessionID))
+		}
+		if record.ClaudeInvocation.TotalCostUSD > 0 {
+			sb.WriteString(fmt.Sprintf("  Cost: $%.4f\n", record.ClaudeInvocation.TotalCostUSD))
+		}
+		if record.ClaudeInvocation.InputTokens > 0 {
+			sb.WriteString(fmt.Sprintf("  Input Tokens: %d\n", record.ClaudeInvocation.InputTokens))
+		}
+		if record.ClaudeInvocation.OutputTokens > 0 {
+			sb.WriteString(fmt.Sprintf("  Output Tokens: %d\n", record.ClaudeInvocation.OutputTokens))
+		}
+	}
+
+	// Feedback (for retries)
+	if record.Feedback != "" {
+		sb.WriteString(fmt.Sprintf("\nFeedback: %s\n", record.Feedback))
+	}
+
+	// Attempt number (for retries)
+	if record.AttemptNumber > 0 {
+		sb.WriteString(fmt.Sprintf("Attempt Number: %d\n", record.AttemptNumber))
+	}
+
+	return sb.String()
+}
+
 // SaveRecord saves an iteration record to the logs directory.
-// Returns the path to the saved file.
+// Returns the path to the saved JSON file.
+// Also creates a human-readable text log file.
 func SaveRecord(logsDir string, record *IterationRecord) (string, error) {
 	if record == nil {
 		return "", errors.New("record cannot be nil")
@@ -171,9 +264,11 @@ func SaveRecord(logsDir string, record *IterationRecord) (string, error) {
 		return "", fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
-	// Generate filename
-	filename := fmt.Sprintf("iteration-%s.json", record.IterationID)
-	path := filepath.Join(logsDir, filename)
+	// Generate filenames
+	jsonFilename := fmt.Sprintf("iteration-%s.json", record.IterationID)
+	textFilename := fmt.Sprintf("iteration-%s.txt", record.IterationID)
+	jsonPath := filepath.Join(logsDir, jsonFilename)
+	textPath := filepath.Join(logsDir, textFilename)
 
 	// Marshal to JSON
 	data, err := json.MarshalIndent(record, "", "  ")
@@ -181,12 +276,20 @@ func SaveRecord(logsDir string, record *IterationRecord) (string, error) {
 		return "", fmt.Errorf("failed to marshal record: %w", err)
 	}
 
-	// Write to file
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	// Write JSON file
+	if err := os.WriteFile(jsonPath, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write record: %w", err)
 	}
 
-	return path, nil
+	// Generate and write text log
+	textLog := GenerateTextLog(record)
+	if err := os.WriteFile(textPath, []byte(textLog), 0644); err != nil {
+		// Don't fail if text log write fails, just log the error
+		// JSON is the source of truth
+		fmt.Fprintf(os.Stderr, "warning: failed to write text log: %v\n", err)
+	}
+
+	return jsonPath, nil
 }
 
 // LoadRecord loads an iteration record from a file.

@@ -368,7 +368,7 @@ tasks:
     description: |
       Modify internal/loop/record.go to generate text summary after saving JSON.
       Write to .ralph/logs/iteration-<n>.txt with task, times, outcome, files, commit.
-    status: open
+    status: completed
     acceptance:
       - "Both .json and .txt logs created per iteration"
       - "Text log is human-readable"

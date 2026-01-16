@@ -380,3 +380,121 @@ func TestIterationRecord_AllPassed(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateTextLog(t *testing.T) {
+	now := time.Date(2026, 1, 16, 14, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name   string
+		record *IterationRecord
+		want   []string // Substrings that must be present
+	}{
+		{
+			name: "successful iteration",
+			record: &IterationRecord{
+				IterationID: "abc123",
+				TaskID:      "task-test-feature",
+				StartTime:   now,
+				EndTime:     now.Add(5 * time.Minute),
+				Outcome:     OutcomeSuccess,
+				ResultCommit: "def456",
+				FilesChanged: []string{"file1.go", "file2.go"},
+				VerificationOutputs: []VerificationOutput{
+					{Command: []string{"go", "test"}, Passed: true},
+				},
+			},
+			want: []string{
+				"Iteration: abc123",
+				"Task: task-test-feature",
+				"Duration: 5m0s",
+				"Outcome: success",
+				"Commit: def456",
+				"file1.go",
+				"file2.go",
+				"go test - PASS",
+			},
+		},
+		{
+			name: "failed iteration",
+			record: &IterationRecord{
+				IterationID: "xyz789",
+				TaskID:      "task-bugfix",
+				StartTime:   now,
+				EndTime:     now.Add(2 * time.Minute),
+				Outcome:     OutcomeFailed,
+				FilesChanged: []string{"main.go"},
+				VerificationOutputs: []VerificationOutput{
+					{Command: []string{"go", "test"}, Passed: false, Output: "FAIL: TestSomething"},
+				},
+				Feedback: "Test failed with assertion error",
+			},
+			want: []string{
+				"Iteration: xyz789",
+				"Task: task-bugfix",
+				"Duration: 2m0s",
+				"Outcome: failed",
+				"main.go",
+				"go test - FAIL",
+				"Feedback: Test failed with assertion error",
+			},
+		},
+		{
+			name: "budget exceeded",
+			record: &IterationRecord{
+				IterationID: "budget1",
+				TaskID:      "task-expensive",
+				StartTime:   now,
+				EndTime:     now.Add(20 * time.Minute),
+				Outcome:     OutcomeBudgetExceeded,
+			},
+			want: []string{
+				"Iteration: budget1",
+				"Outcome: budget_exceeded",
+				"Duration: 20m0s",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateTextLog(tt.record)
+
+			assert.NotEmpty(t, result)
+			for _, substr := range tt.want {
+				assert.Contains(t, result, substr, "expected substring not found: %s", substr)
+			}
+		})
+	}
+}
+
+func TestSaveRecord_CreatesTextLog(t *testing.T) {
+	dir := t.TempDir()
+	record := &IterationRecord{
+		IterationID: "text001",
+		TaskID:      "task-123",
+		StartTime:   time.Now(),
+		EndTime:     time.Now().Add(5 * time.Minute),
+		Outcome:     OutcomeSuccess,
+		FilesChanged: []string{"file1.go"},
+	}
+
+	jsonPath, err := SaveRecord(dir, record)
+	require.NoError(t, err)
+
+	// Check JSON file exists
+	assert.FileExists(t, jsonPath)
+	assert.Contains(t, jsonPath, "iteration-text001.json")
+
+	// Check text file exists
+	textPath := filepath.Join(dir, "iteration-text001.txt")
+	assert.FileExists(t, textPath)
+
+	// Verify text content is readable
+	data, err := os.ReadFile(textPath)
+	require.NoError(t, err)
+	content := string(data)
+
+	assert.Contains(t, content, "Iteration: text001")
+	assert.Contains(t, content, "Task: task-123")
+	assert.Contains(t, content, "Outcome: success")
+}
