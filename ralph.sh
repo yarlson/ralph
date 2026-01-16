@@ -33,43 +33,54 @@ EOF
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 supports_color() {
-    [[ -t 1 ]] && have_cmd tput && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]
+	[[ -t 1 ]] && have_cmd tput && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]
 }
 
 if supports_color; then
-    COLORS="$(tput colors 2>/dev/null || echo 0)"
-    C_RESET="$(tput sgr0)"
-    C_BOLD="$(tput bold)"
-    C_DIM="$(tput dim)"
-    if [[ "$COLORS" =~ ^[0-9]+$ ]] && [ "$COLORS" -ge 256 ]; then
-        C_ERROR="$(tput setaf 211)"
-        C_SUCCESS="$(tput setaf 150)"
-        C_WARN="$(tput setaf 215)"
-        C_PRIMARY="$(tput setaf 80)"
-        C_ACCENT="$(tput setaf 141)"
-        C_INFO="$(tput setaf 147)"
-    else
-        C_ERROR="$(tput setaf 1)"
-        C_SUCCESS="$(tput setaf 2)"
-        C_WARN="$(tput setaf 3)"
-        C_PRIMARY="$(tput setaf 6)"
-        C_ACCENT="$(tput setaf 5)"
-        C_INFO="$(tput setaf 4)"
-    fi
+	COLORS="$(tput colors 2>/dev/null || echo 0)"
+	TRUECOLOR=0
+	case "${COLORTERM:-}" in
+	*truecolor* | *24bit*) TRUECOLOR=1 ;;
+	esac
+	C_RESET="$(tput sgr0)"
+	C_BOLD="$(tput bold)"
+	C_DIM="$(tput dim)"
+	if [ "$TRUECOLOR" -eq 1 ]; then
+		C_ERROR=$'\033[38;2;243;139;168m'
+		C_SUCCESS=$'\033[38;2;166;227;161m'
+		C_WARN=$'\033[38;2;250;179;135m'
+		C_PRIMARY=$'\033[38;2;148;226;213m'
+		C_ACCENT=$'\033[38;2;203;166;247m'
+		C_INFO=$'\033[38;2;180;190;254m'
+	elif [[ "$COLORS" =~ ^[0-9]+$ ]] && [ "$COLORS" -ge 256 ]; then
+		C_ERROR="$(tput setaf 211)"
+		C_SUCCESS="$(tput setaf 150)"
+		C_WARN="$(tput setaf 215)"
+		C_PRIMARY="$(tput setaf 80)"
+		C_ACCENT="$(tput setaf 141)"
+		C_INFO="$(tput setaf 147)"
+	else
+		C_ERROR="$(tput setaf 1)"
+		C_SUCCESS="$(tput setaf 2)"
+		C_WARN="$(tput setaf 3)"
+		C_PRIMARY="$(tput setaf 6)"
+		C_ACCENT="$(tput setaf 5)"
+		C_INFO="$(tput setaf 4)"
+	fi
 else
-    C_RESET=""
-    C_BOLD=""
-    C_DIM=""
-    C_ERROR=""
-    C_SUCCESS=""
-    C_WARN=""
-    C_PRIMARY=""
-    C_ACCENT=""
-    C_INFO=""
+	C_RESET=""
+	C_BOLD=""
+	C_DIM=""
+	C_ERROR=""
+	C_SUCCESS=""
+	C_WARN=""
+	C_PRIMARY=""
+	C_ACCENT=""
+	C_INFO=""
 fi
 
 format_markdown() {
-    C_BOLD="$C_BOLD" C_ACCENT="$C_ACCENT" C_RESET="$C_RESET" perl -pe '
+	C_BOLD="$C_BOLD" C_ACCENT="$C_ACCENT" C_RESET="$C_RESET" perl -pe '
         BEGIN {
             $cb = $ENV{C_BOLD} // "";
             $cp = $ENV{C_ACCENT} // "";
@@ -82,106 +93,106 @@ format_markdown() {
 }
 
 banner() {
-    local color="$1"
-    shift
-    local title="$1"
-    shift
-    local now width cols line left right pad spaces
-    now="$(date '+%Y-%m-%d %H:%M:%S')"
+	local color="$1"
+	shift
+	local title="$1"
+	shift
+	local now width cols line left right pad spaces
+	now="$(date '+%Y-%m-%d %H:%M:%S')"
 
-    width=72
-    if have_cmd tput; then
-        cols="$(tput cols 2>/dev/null || echo 0)"
-        if [[ "$cols" =~ ^[0-9]+$ ]] && [ "$cols" -ge 60 ]; then
-            width="$cols"
-        fi
-    fi
-    if [ "$width" -gt 96 ]; then
-        width=96
-    fi
+	width=72
+	if have_cmd tput; then
+		cols="$(tput cols 2>/dev/null || echo 0)"
+		if [[ "$cols" =~ ^[0-9]+$ ]] && [ "$cols" -ge 60 ]; then
+			width="$cols"
+		fi
+	fi
+	if [ "$width" -gt 96 ]; then
+		width=96
+	fi
 
-    line="$(printf '%*s' "$width" '')"
-    line="${line// /-}"
+	line="$(printf '%*s' "$width" '')"
+	line="${line// /-}"
 
-    left="RALPH ${title}"
-    right="(${now})"
-    pad=$((width - 2 - ${#left} - ${#right}))
-    if [ "$pad" -lt 1 ]; then
-        pad=1
-    fi
-    spaces="$(printf '%*s' "$pad" '')"
+	left="RALPH ${title}"
+	right="(${now})"
+	pad=$((width - 2 - ${#left} - ${#right}))
+	if [ "$pad" -lt 1 ]; then
+		pad=1
+	fi
+	spaces="$(printf '%*s' "$pad" '')"
 
-    printf '\n%s%s%s\n' "${C_DIM}" "$line" "${C_RESET}"
-    printf '  %s%s%s %s%s%s%s%s%s\n' \
-        "${C_PRIMARY}${C_BOLD}" "RALPH" "${C_RESET}" \
-        "${color}${C_BOLD}" "$title" "${C_RESET}" \
-        "$spaces" \
-        "${C_DIM}" "$right" "${C_RESET}"
-    if [[ $# -gt 0 ]]; then
-        printf '  %s%s%s\n' "${C_DIM}" "$*" "${C_RESET}"
-    fi
-    printf '%s%s%s\n\n' "${C_DIM}" "$line" "${C_RESET}"
+	printf '\n%s%s%s\n' "${C_DIM}" "$line" "${C_RESET}"
+	printf '  %s%s%s %s%s%s%s%s%s\n' \
+		"${C_PRIMARY}${C_BOLD}" "RALPH" "${C_RESET}" \
+		"${color}${C_BOLD}" "$title" "${C_RESET}" \
+		"$spaces" \
+		"${C_DIM}" "$right" "${C_RESET}"
+	if [[ $# -gt 0 ]]; then
+		printf '  %s%s%s\n' "${C_DIM}" "$*" "${C_RESET}"
+	fi
+	printf '%s%s%s\n\n' "${C_DIM}" "$line" "${C_RESET}"
 }
 
 fmt_duration() {
-    local s="$1"
-    local h=$((s / 3600))
-    local m=$(((s % 3600) / 60))
-    local r=$((s % 60))
-    printf '%02d:%02d:%02d' "$h" "$m" "$r"
+	local s="$1"
+	local h=$((s / 3600))
+	local m=$(((s % 3600) / 60))
+	local r=$((s % 60))
+	printf '%02d:%02d:%02d' "$h" "$m" "$r"
 }
 
 run_id=0
 
 while :; do
-    run_id=$((run_id + 1))
-    SECONDS=0
+	run_id=$((run_id + 1))
+	SECONDS=0
 
-    banner "${C_INFO}" "Starting task run #${run_id}" "Streaming assistant output below…"
+	banner "${C_INFO}" "Starting task run #${run_id}" "Streaming assistant output below…"
 
-    tmp="$(mktemp -t ralph_ndjson.XXXXXX)"
+	tmp="$(mktemp -t ralph_ndjson.XXXXXX)"
 
-    claude --print \
-        --output-format=stream-json \
-        --include-partial-messages \
-        --verbose \
-        --dangerously-skip-permissions \
-        -p "$PROMPT" |
-        tee "$tmp" |
-        stdbuf -oL -eL jq -r '
+	claude --print \
+		--output-format=stream-json \
+		--include-partial-messages \
+		--verbose \
+		--dangerously-skip-permissions \
+		-p "$PROMPT" |
+		tee "$tmp" |
+		stdbuf -oL -eL jq -r '
         select(.type=="assistant")
         | .message.content[]?
         | select(.type=="text")
         | .text
       ' | format_markdown
 
-    rc="${PIPESTATUS[0]}"
-    if [ "$rc" -ne 0 ]; then
-        banner "${C_ERROR}" "Claude failed (exit code ${rc})" "Aborting."
-        rm -f "$tmp"
-        exit "$rc"
-    fi
+	rc="${PIPESTATUS[0]}"
+	if [ "$rc" -ne 0 ]; then
+		banner "${C_ERROR}" "Claude failed (exit code ${rc})" "Aborting."
+		rm -f "$tmp"
+		exit "$rc"
+	fi
 
-    final="$(jq -r 'select(.type=="result") | .result // empty' "$tmp" | tail -n 1)"
-    rm -f "$tmp"
+	final="$(jq -r 'select(.type=="result") | .result // empty' "$tmp" | tail -n 1)"
+	rm -f "$tmp"
 
-    status="$(printf '%s\n' "$final" | tail -n 1)"
-    elapsed="$SECONDS"
-    elapsed_fmt="$(fmt_duration "$elapsed")"
+	status="$(printf '%s\n' "$final" | tail -n 1)"
+	elapsed="$SECONDS"
+	elapsed_fmt="$(fmt_duration "$elapsed")"
 
-    banner "${C_SUCCESS}" "Finished task run #${run_id}" "Time taken: ${elapsed_fmt}"
+	banner "${C_SUCCESS}" "Finished task run #${run_id}" "Time taken: ${elapsed_fmt}"
 
-    if [ "$status" = "RALPH_DONE" ]; then
-        say "All tasks are complete. The project is finished."
-        exit 0
-    fi
+	if [ "$status" = "RALPH_DONE" ]; then
+		say "All tasks are complete. The project is finished."
+		exit 0
+	fi
 
-    if [ "$status" = "RALPH_BLOCKED" ]; then
-        printf '%sRalph is blocked%s (no ready tasks). Review dependencies in tasks.yaml.\n' "${C_WARN}${C_BOLD}" "${C_RESET}" >&2
-        say "Ralph is blocked. No ready tasks."
-        exit 2
-    fi
+	if [ "$status" = "RALPH_BLOCKED" ]; then
+		printf '%sRalph is blocked%s (no ready tasks). Review dependencies in tasks.yaml.\n' "${C_WARN}${C_BOLD}" "${C_RESET}" >&2
+		say "Ralph is blocked. No ready tasks."
+		exit 2
+	fi
 
-    gic -y
-    say "Task completed. Moving to the next one."
+	gic -y
+	say "Task completed. Moving to the next one."
 done

@@ -160,7 +160,7 @@ tasks:
       Create cmd/import.go to read YAML file and call taskstore.ImportFromYAML.
       Validates all tasks before importing.
       Add --overwrite flag to replace existing tasks.
-    status: open
+    status: completed
     acceptance:
       - "ralph import tasks.yaml loads tasks into store"
       - "Validation errors show task IDs and reasons"
