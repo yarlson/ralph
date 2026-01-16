@@ -485,7 +485,7 @@ tasks:
       - VerificationResult: Passed bool, Command []string, Output string, Duration time.Duration
       - Verifier.Verify(ctx, commands [][]string) ([]VerificationResult, error)
       - Verifier.VerifyTask(ctx, task *Task) ([]VerificationResult, error)
-    status: open
+    status: completed
     acceptance:
       - "Interface defined with result types"
       - "Context support for timeout"

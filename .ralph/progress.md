@@ -318,3 +318,23 @@
 - Don't use `omitempty` on `time.Time` struct fields (linter warning: has no effect on nested structs)
 
 **Outcome**: Success - all 62 claude tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: verifier-interface (Verifier Interface)
+
+**What changed:**
+- Created `internal/verifier` package for verification command execution
+- Implemented `VerificationResult` struct with fields: Passed (bool), Command ([]string), Output (string), Duration (time.Duration)
+- Defined `Verifier` interface with `Verify(ctx, commands [][]string)` and `VerifyTask(ctx, commands [][]string)` methods
+- Both methods support context for timeout/cancellation
+- All types have JSON tags for logging and serialization
+
+**Files touched:**
+- `internal/verifier/verifier.go` (new)
+- `internal/verifier/verifier_test.go` (new)
+
+**Learnings:**
+- Interface naming: `Verifier` is appropriate here since it's the primary interface in the package
+- TDD approach: wrote 9 tests first covering struct defaults, all fields, JSON serialization, interface implementation via mock, and context cancellation/timeout
+- `VerifyTask` takes commands directly ([][]string) rather than *Task to avoid coupling verifier package to taskstore package - keeps interface clean and testable
+
+**Outcome**: Success - all 9 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
