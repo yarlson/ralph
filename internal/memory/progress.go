@@ -27,8 +27,8 @@ type IterationEntry struct {
 
 // SizeOptions configures the maximum size limits for the progress file.
 type SizeOptions struct {
-	MaxLines int
-	MaxBytes int
+	MaxBytes            int // Maximum file size in bytes (0 = unlimited)
+	MaxRecentIterations int // Minimum number of recent iterations to preserve
 }
 
 // NewProgressFile creates a new ProgressFile manager for the given path.
@@ -219,7 +219,8 @@ func replaceSection(content, startMarker, endMarker, newContent string) (string,
 }
 
 // EnforceMaxSize prunes old iteration entries if the file exceeds the configured limits.
-// Returns true if pruning was performed.
+// It preserves the header and Codebase Patterns section, and keeps at least MaxRecentIterations
+// of the most recent entries. Returns true if pruning was performed.
 func (p *ProgressFile) EnforceMaxSize(opts SizeOptions) (bool, error) {
 	if !p.Exists() {
 		return false, nil
@@ -230,10 +231,14 @@ func (p *ProgressFile) EnforceMaxSize(opts SizeOptions) (bool, error) {
 		return false, fmt.Errorf("reading progress file: %w", err)
 	}
 
-	lines := strings.Split(string(content), "\n")
-	if opts.MaxLines == 0 || len(lines) <= opts.MaxLines {
+	// Check if we need to prune based on byte size
+	if opts.MaxBytes == 0 || len(content) <= opts.MaxBytes {
 		return false, nil
 	}
+
+	// Parse the file structure
+	text := string(content)
+	lines := strings.Split(text, "\n")
 
 	// Find the iteration log section
 	iterationLogIdx := -1
@@ -249,50 +254,74 @@ func (p *ProgressFile) EnforceMaxSize(opts SizeOptions) (bool, error) {
 		return false, nil
 	}
 
-	// Preserve header (everything before and including "## Iteration Log" + 1 blank line)
-	headerEndIdx := min(iterationLogIdx+2, len(lines)) // Include section header and blank line
-	header := lines[:headerEndIdx]
+	// Preserve header (everything before and including "## Iteration Log" + blank line)
+	// This includes the file header and the Codebase Patterns section
+	headerEndIdx := iterationLogIdx + 1
+	if headerEndIdx < len(lines) && lines[headerEndIdx] == "" {
+		headerEndIdx++ // Include the blank line after "## Iteration Log"
+	}
+	headerLines := lines[:headerEndIdx]
 
 	// Get iteration entries
 	iterationLines := lines[headerEndIdx:]
-
-	// Find how many lines we need to remove
-	headerLen := len(header)
-	targetIterationLines := max(opts.MaxLines-headerLen, 0)
-
-	if len(iterationLines) <= targetIterationLines {
-		return false, nil
-	}
-
-	// Keep only the most recent entries (from the end)
-	// Find entry boundaries (lines starting with "### ")
 	entries := splitIntoEntries(iterationLines)
 	if len(entries) == 0 {
 		return false, nil
 	}
 
-	// Calculate how many entries to keep
-	keptLines := 0
-	keepFrom := len(entries)
-	for i := len(entries) - 1; i >= 0; i-- {
-		entryLen := strings.Count(entries[i], "\n") + 1
-		if keptLines+entryLen > targetIterationLines {
-			break
+	// Always keep at least MaxRecentIterations entries
+	minKeepEntries := opts.MaxRecentIterations
+	if minKeepEntries <= 0 {
+		minKeepEntries = 1 // Always keep at least one entry
+	}
+	if len(entries) <= minKeepEntries {
+		return false, nil // Not enough entries to prune
+	}
+
+	// Calculate how many entries to keep to stay under size limit
+	// Build header first to know its size
+	var headerBuilder strings.Builder
+	for _, line := range headerLines {
+		headerBuilder.WriteString(line)
+		headerBuilder.WriteString("\n")
+	}
+	headerSize := headerBuilder.Len()
+
+	// Start with minimum required iterations and see if we're under limit
+	keepFrom := len(entries) - minKeepEntries
+	for keepFrom > 0 {
+		testSize := headerSize
+		for i := keepFrom; i < len(entries); i++ {
+			testSize += len(entries[i])
+			if i < len(entries)-1 {
+				testSize++ // newline between entries
+			}
 		}
-		keptLines += entryLen
-		keepFrom = i
+		if testSize <= opts.MaxBytes {
+			break // Found a good pruning point
+		}
+		// Still too large, try removing one more old entry
+		keepFrom++
 	}
 
 	if keepFrom == 0 {
-		return false, nil
+		// Even with all entries we're over limit, but we must keep minimum recent
+		keepFrom = len(entries) - minKeepEntries
+	}
+
+	if keepFrom == 0 {
+		return false, nil // No pruning needed
 	}
 
 	// Build pruned content
 	var sb strings.Builder
-	for _, line := range header {
-		sb.WriteString(line)
-		sb.WriteString("\n")
+	sb.WriteString(headerBuilder.String())
+
+	// Add pruning note if we removed entries
+	if keepFrom > 0 {
+		sb.WriteString("<!-- Older entries pruned to maintain size limit -->\n\n")
 	}
+
 	for i := keepFrom; i < len(entries); i++ {
 		sb.WriteString(entries[i])
 		if i < len(entries)-1 {

@@ -123,6 +123,10 @@ type Controller struct {
 	configVerifyCommands   [][]string     // global verification commands from config
 	branchOverride         string         // optional branch name override
 
+	// Memory configuration
+	maxProgressBytes      int
+	maxRecentIterations   int
+
 	// Sandbox mode configuration
 	sandboxEnabled bool
 	allowedTools   []string
@@ -150,6 +154,12 @@ func NewController(deps ControllerDeps) *Controller {
 // SetBudgetLimits sets the budget limits for the controller.
 func (c *Controller) SetBudgetLimits(limits BudgetLimits) {
 	c.budget = NewBudgetTracker(limits)
+}
+
+// SetMemoryConfig sets the memory configuration for progress file size limits.
+func (c *Controller) SetMemoryConfig(maxBytes, maxRecentIterations int) {
+	c.maxProgressBytes = maxBytes
+	c.maxRecentIterations = maxRecentIterations
 }
 
 // SetGutterConfig sets the gutter detection configuration.
@@ -703,6 +713,13 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 			Outcome:      "Success",
 		}
 		_ = c.progressFile.AppendIteration(entry)
+
+		// Enforce size limits after appending
+		sizeOpts := memory.SizeOptions{
+			MaxBytes:            c.maxProgressBytes,
+			MaxRecentIterations: c.maxRecentIterations,
+		}
+		_, _ = c.progressFile.EnforceMaxSize(sizeOpts)
 	}
 
 	record.Complete(OutcomeSuccess)

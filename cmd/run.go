@@ -168,6 +168,9 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	}
 	controller.SetGutterConfig(gutterConfig)
 
+	// Configure memory limits
+	controller.SetMemoryConfig(cfg.Memory.MaxProgressBytes, cfg.Memory.MaxRecentIterations)
+
 	// Configure max retries
 	controller.SetMaxRetries(cfg.Loop.MaxRetries)
 	controller.SetMaxVerificationRetries(cfg.Loop.MaxVerificationRetries)

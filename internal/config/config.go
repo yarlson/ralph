@@ -32,8 +32,10 @@ type TasksConfig struct {
 
 // MemoryConfig holds memory/progress file settings
 type MemoryConfig struct {
-	ProgressFile string `mapstructure:"progress_file"`
-	ArchiveDir   string `mapstructure:"archive_dir"`
+	ProgressFile          string `mapstructure:"progress_file"`
+	ArchiveDir            string `mapstructure:"archive_dir"`
+	MaxProgressBytes      int    `mapstructure:"max_progress_bytes"`
+	MaxRecentIterations   int    `mapstructure:"max_recent_iterations"`
 }
 
 // ClaudeConfig holds Claude Code invocation settings
@@ -161,6 +163,8 @@ func setDefaults(v *viper.Viper) {
 	// Memory defaults
 	v.SetDefault("memory.progress_file", ".ralph/progress.md")
 	v.SetDefault("memory.archive_dir", ".ralph/archive")
+	v.SetDefault("memory.max_progress_bytes", 1048576) // 1MB
+	v.SetDefault("memory.max_recent_iterations", 20)
 
 	// Claude defaults
 	v.SetDefault("claude.command", []string{"claude"})

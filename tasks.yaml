@@ -436,7 +436,7 @@ tasks:
       If exceeds config limit (default 1MB), prune oldest entries while preserving
       header, Codebase Patterns, and recent N iterations (default 20).
       Add memory.max_progress_bytes to config.
-    status: open
+    status: completed
     acceptance:
       - "Progress file stays under size limit"
       - "Header and patterns never pruned"

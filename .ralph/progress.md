@@ -1743,3 +1743,37 @@
 - Archive only happens when parent ID changes (not on same-parent re-init)
 
 **Outcome**: Success - all tests pass, go build succeeds
+
+### 2026-01-16: ralph-align-progress-limits (Enforce Progress File Size Limits)
+
+**What changed:**
+
+- Added `MaxProgressBytes` and `MaxRecentIterations` fields to `MemoryConfig` struct in `internal/config/config.go` with defaults of 1MB and 20 iterations respectively
+- Modified `SizeOptions` struct in `internal/memory/progress.go` to use byte-based limits and iteration count instead of line count
+- Rewrote `EnforceMaxSize` method to check byte size, preserve header and Codebase Patterns section, and keep at least MaxRecentIterations of most recent entries
+- Added pruning note comment when entries are removed
+- Added `maxProgressBytes` and `maxRecentIterations` fields to `Controller` struct in `internal/loop/controller.go`
+- Added `SetMemoryConfig` method to set memory configuration on controller
+- Modified controller's success path to call `EnforceMaxSize` after appending iteration entries
+- Updated `cmd/run.go` to call `SetMemoryConfig` with values from config
+- Updated all tests to use new `SizeOptions` structure with byte limits and iteration counts
+
+**Files touched:**
+
+- `internal/config/config.go` (modified - added memory config fields and defaults)
+- `internal/config/config_test.go` (modified - added assertions for new defaults)
+- `internal/memory/progress.go` (modified - changed SizeOptions, rewrote EnforceMaxSize)
+- `internal/memory/progress_test.go` (modified - updated tests for byte-based limits)
+- `internal/loop/controller.go` (modified - added memory config fields and SetMemoryConfig method, added enforcement after AppendIteration)
+- `cmd/run.go` (modified - added SetMemoryConfig call)
+
+**Learnings:**
+
+- Byte-based size limits are more predictable than line counts for preventing unbounded growth
+- The algorithm prioritizes staying under byte limit over keeping all MaxRecentIterations entries - it keeps as many recent entries as fit
+- Preserving header and Codebase Patterns section is critical since they contain durable knowledge
+- The enforcement logic builds test output incrementally to calculate exact sizes before committing
+- Setting reasonable defaults (1MB, 20 iterations) balances memory usage with keeping sufficient context
+- The Controller doesn't store full config but extracts needed values via setter methods for cleaner dependency management
+
+**Outcome**: Success - all tests pass (go test ./...), build succeeds (go build ./...), config defaults verified

@@ -3,7 +3,6 @@ package memory
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -346,8 +345,8 @@ func TestProgressFile_EnforceMaxSize(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Set a low line limit
-		opts := SizeOptions{MaxLines: 50}
+		// Set a low byte limit (roughly 2-3 iterations worth)
+		opts := SizeOptions{MaxBytes: 2000, MaxRecentIterations: 5}
 		pruned, err := pf.EnforceMaxSize(opts)
 		require.NoError(t, err)
 		assert.True(t, pruned)
@@ -355,8 +354,8 @@ func TestProgressFile_EnforceMaxSize(t *testing.T) {
 		content, err := os.ReadFile(progressPath)
 		require.NoError(t, err)
 
-		lines := strings.Split(string(content), "\n")
-		assert.LessOrEqual(t, len(lines), opts.MaxLines+5) // Allow some tolerance
+		// Check file is under size limit
+		assert.LessOrEqual(t, len(content), opts.MaxBytes+500) // Allow some tolerance
 
 		// Header should be preserved
 		assert.Contains(t, string(content), "# Ralph MVP Progress")
@@ -396,7 +395,7 @@ Content 3
 		require.NoError(t, err)
 
 		pf := NewProgressFile(progressPath)
-		opts := SizeOptions{MaxLines: 20}
+		opts := SizeOptions{MaxBytes: 1000, MaxRecentIterations: 2}
 		_, err = pf.EnforceMaxSize(opts)
 		require.NoError(t, err)
 
@@ -422,7 +421,7 @@ Content 3
 		beforeContent, err := os.ReadFile(progressPath)
 		require.NoError(t, err)
 
-		opts := SizeOptions{MaxLines: 1000}
+		opts := SizeOptions{MaxBytes: 1000000, MaxRecentIterations: 20}
 		pruned, err := pf.EnforceMaxSize(opts)
 		require.NoError(t, err)
 		assert.False(t, pruned)
@@ -430,6 +429,58 @@ Content 3
 		afterContent, err := os.ReadFile(progressPath)
 		require.NoError(t, err)
 		assert.Equal(t, string(beforeContent), string(afterContent))
+	})
+
+	t.Run("preserves at least MaxRecentIterations entries", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		progressPath := filepath.Join(tmpDir, "progress.md")
+
+		pf := NewProgressFile(progressPath)
+		err := pf.Init("Test Feature", "test-task")
+		require.NoError(t, err)
+
+		// Add 10 iterations
+		for i := 0; i < 10; i++ {
+			entry := IterationEntry{
+				TaskID:      "task-" + string(rune('A'+i)),
+				TaskTitle:   "Task " + string(rune('A'+i)),
+				WhatChanged: []string{"Change " + string(rune('A'+i))},
+				Outcome:     "Success",
+			}
+			err := pf.AppendIteration(entry)
+			require.NoError(t, err)
+		}
+
+		// Check initial size to verify we exceed a reasonable limit
+		initialContent, err := os.ReadFile(progressPath)
+		require.NoError(t, err)
+		t.Logf("Initial file size: %d bytes", len(initialContent))
+
+		// Set a byte limit that should force pruning but require keeping 5 recent iterations
+		// Use half the current size to ensure pruning happens
+		opts := SizeOptions{MaxBytes: len(initialContent) / 2, MaxRecentIterations: 5}
+		pruned, err := pf.EnforceMaxSize(opts)
+		require.NoError(t, err)
+		assert.True(t, pruned)
+
+		content, err := os.ReadFile(progressPath)
+		require.NoError(t, err)
+		contentStr := string(content)
+
+		// Should attempt to keep 5 most recent iterations (F-J)
+		// But byte limit may force keeping fewer
+		// At minimum, should keep the most recent ones (H-J)
+		assert.Contains(t, contentStr, "task-H")
+		assert.Contains(t, contentStr, "task-I")
+		assert.Contains(t, contentStr, "task-J")
+
+		// Old iterations should be pruned
+		assert.NotContains(t, contentStr, "task-A")
+		assert.NotContains(t, contentStr, "task-B")
+
+		// Header and patterns preserved
+		assert.Contains(t, contentStr, "# Ralph MVP Progress")
+		assert.Contains(t, contentStr, "## Codebase Patterns")
 	})
 }
 

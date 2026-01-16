@@ -100,6 +100,8 @@ func TestLoadConfig_WithDefaults(t *testing.T) {
 
 	assert.Equal(t, ".ralph/progress.md", cfg.Memory.ProgressFile)
 	assert.Equal(t, ".ralph/archive", cfg.Memory.ArchiveDir)
+	assert.Equal(t, 1048576, cfg.Memory.MaxProgressBytes)     // 1MB default
+	assert.Equal(t, 20, cfg.Memory.MaxRecentIterations)
 
 	assert.Equal(t, []string{"claude"}, cfg.Claude.Command)
 	assert.Empty(t, cfg.Claude.Args)
