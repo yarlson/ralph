@@ -362,3 +362,26 @@
 - Default 1MB max output size is reasonable; truncation preserves beginning and adds marker at end
 
 **Outcome**: Success - all 28 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed
+
+### 2026-01-16: verifier-output-trimmer (Output Trimmer for Feedback)
+
+**What changed:**
+- Implemented `TrimOutput(output, opts)` function in `internal/verifier/trimmer.go`
+- Created `TrimOptions` struct with `MaxLines` and `MaxBytes` configurable limits
+- Trimming preserves the tail (end) of output since error messages typically appear at the end
+- Added `TruncationMarker` constant ("... [output truncated]") prepended when trimming occurs
+- Implemented `TrimOutputForFeedback(results, opts)` helper that formats failed verification results for Claude retry prompts
+- Added `DefaultTrimOptions()` returning sensible defaults (100 lines, 8KB)
+- Added `Validate()` method on TrimOptions to check for negative values
+
+**Files touched:**
+- `internal/verifier/trimmer.go` (new)
+- `internal/verifier/trimmer_test.go` (new)
+
+**Learnings:**
+- Preserving tail of output is more useful for error feedback than preserving head - errors and failures typically appear at the end of verification output
+- When applying both line and byte limits, apply line limit first then byte limit - this gives most predictable results
+- Use Go's built-in `max()` function instead of manual if-else for cleaner code (Go 1.21+)
+- TDD approach: wrote 25 tests first covering empty input, no limits, under limits, exact limits, both limits with different restrictiveness, single lines, trailing newlines, empty lines, large input, and feedback formatting
+
+**Outcome**: Success - all 40 verifier tests pass, `go build ./...`, `go test ./...`, and `golangci-lint run` succeed

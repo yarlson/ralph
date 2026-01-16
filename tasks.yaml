@@ -529,7 +529,7 @@ tasks:
       - Trim verification output to configurable max lines/bytes
       - Preserve most relevant parts (end of output typically has errors)
       - Format for inclusion in next Claude prompt
-    status: open
+    status: completed
     acceptance:
       - "TrimOutput respects max lines/bytes"
       - "Preserves tail of output"
