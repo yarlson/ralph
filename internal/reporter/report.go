@@ -2,8 +2,6 @@ package reporter
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -158,7 +156,7 @@ func (g *ReportGenerator) GenerateReport(parentTaskID string) (*Report, error) {
 
 	// Load iteration records for commits, costs, and timing
 	if g.logsDir != "" {
-		records, err := LoadAllIterationRecords(g.logsDir)
+		records, err := loop.LoadAllIterationRecords(g.logsDir)
 		if err == nil {
 			report.TotalIterations = len(records)
 
@@ -237,39 +235,6 @@ func (g *ReportGenerator) getBlockedReason(task *taskstore.Task, taskByID map[st
 	return ""
 }
 
-// LoadAllIterationRecords loads all iteration records from the logs directory.
-func LoadAllIterationRecords(logsDir string) ([]*loop.IterationRecord, error) {
-	entries, err := os.ReadDir(logsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read logs directory: %w", err)
-	}
-
-	var records []*loop.IterationRecord
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		// Only process iteration JSON files
-		name := entry.Name()
-		if !strings.HasPrefix(name, "iteration-") || !strings.HasSuffix(name, ".json") {
-			continue
-		}
-
-		path := filepath.Join(logsDir, name)
-		record, err := loop.LoadRecord(path)
-		if err != nil {
-			continue // Skip invalid files
-		}
-
-		records = append(records, record)
-	}
-
-	return records, nil
-}
 
 // FormatReport formats a report for CLI display.
 func FormatReport(report *Report) string {

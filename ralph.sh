@@ -43,6 +43,7 @@ if supports_color; then
     C_RED="$(tput setaf 1)"
     C_GREEN="$(tput setaf 2)"
     C_YELLOW="$(tput setaf 3)"
+    C_PURPLE="$(tput setaf 5)"
     C_CYAN="$(tput setaf 6)"
 else
     C_RESET=""
@@ -51,8 +52,22 @@ else
     C_RED=""
     C_GREEN=""
     C_YELLOW=""
+    C_PURPLE=""
     C_CYAN=""
 fi
+
+format_markdown() {
+    C_BOLD="$C_BOLD" C_PURPLE="$C_PURPLE" C_RESET="$C_RESET" perl -pe '
+        BEGIN {
+            $cb = $ENV{C_BOLD} // "";
+            $cp = $ENV{C_PURPLE} // "";
+            $cr = $ENV{C_RESET} // "";
+        }
+        s/\*\*([^*]+)\*\*/$cb$1$cr/g;
+        s/`([^`]+)`/$cp$1$cr/g;
+        s/$/$cr/;
+    '
+}
 
 banner() {
     local color="$1"
@@ -99,7 +114,7 @@ while :; do
         | .message.content[]?
         | select(.type=="text")
         | .text
-      '
+      ' | format_markdown
 
     rc="${PIPESTATUS[0]}"
     if [ "$rc" -ne 0 ]; then

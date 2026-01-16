@@ -3,6 +3,8 @@ package loop
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/yarlson/go-ralph/internal/claude"
@@ -484,7 +486,23 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 }
 
 // buildPrompt constructs the prompt for Claude using the full iteration prompt builder.
+// For retries (attemptNumber > 1), it uses the retry prompt builder with failure context.
 func (c *Controller) buildPrompt(ctx context.Context, task *taskstore.Task) (string, string, error) {
+	builder := prompt.NewBuilder(nil) // Use default size options
+
+	// Check if this is a retry (attempt > 1)
+	attemptNumber := c.taskAttempts[task.ID]
+	if attemptNumber > 1 {
+		// This is a retry - build retry prompt
+		return c.buildRetryPrompt(ctx, task, attemptNumber, builder)
+	}
+
+	// Initial attempt - build regular iteration prompt
+	return c.buildInitialPrompt(ctx, task, builder)
+}
+
+// buildInitialPrompt builds the prompt for the initial attempt.
+func (c *Controller) buildInitialPrompt(ctx context.Context, task *taskstore.Task, builder *prompt.Builder) (string, string, error) {
 	// Extract codebase patterns from progress file
 	var patterns string
 	if c.progressFile != nil {
@@ -509,8 +527,64 @@ func (c *Controller) buildPrompt(ctx context.Context, task *taskstore.Task) (str
 	}
 
 	// Build prompts using prompt builder
-	builder := prompt.NewBuilder(nil) // Use default size options
 	result, err := builder.Build(iterCtx)
+	if err != nil {
+		return "", "", err
+	}
+
+	return result.SystemPrompt, result.UserPrompt, nil
+}
+
+// buildRetryPrompt builds the prompt for a retry attempt after verification failure.
+func (c *Controller) buildRetryPrompt(ctx context.Context, task *taskstore.Task, attemptNumber int, builder *prompt.Builder) (string, string, error) {
+	// Load user feedback if it exists
+	var userFeedback string
+	if c.workDir != "" {
+		feedbackPath := filepath.Join(state.StateDirPath(c.workDir), fmt.Sprintf("feedback-%s.txt", task.ID))
+		if feedbackBytes, err := os.ReadFile(feedbackPath); err == nil {
+			userFeedback = string(feedbackBytes)
+		}
+	}
+
+	// Load the most recent iteration record to get failure output
+	var failureOutput string
+	var failureSignature string
+	if records, err := LoadAllIterationRecords(c.logsDir); err == nil {
+		// Find the most recent failed iteration for this task
+		for i := len(records) - 1; i >= 0; i-- {
+			if records[i].TaskID == task.ID && records[i].Outcome == OutcomeFailed {
+				// Extract failure outputs and compute signature
+				failureSignature = ComputeFailureSignature(records[i].VerificationOutputs)
+
+				// Convert verification outputs to verifier results for trimming
+				var results []verifier.VerificationResult
+				for _, vo := range records[i].VerificationOutputs {
+					results = append(results, verifier.VerificationResult{
+						Command:  vo.Command,
+						Passed:   vo.Passed,
+						Output:   vo.Output,
+						Duration: vo.Duration,
+					})
+				}
+
+				// Trim the failure output
+				failureOutput = verifier.TrimOutputForFeedback(results, verifier.DefaultTrimOptions())
+				break
+			}
+		}
+	}
+
+	// Build retry context
+	retryCtx := prompt.RetryContext{
+		Task:             task,
+		FailureOutput:    failureOutput,
+		FailureSignature: failureSignature,
+		UserFeedback:     userFeedback,
+		AttemptNumber:    attemptNumber,
+	}
+
+	// Build retry prompts
+	result, err := builder.BuildRetry(retryCtx)
 	if err != nil {
 		return "", "", err
 	}

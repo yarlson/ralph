@@ -203,3 +203,37 @@ func LoadRecord(path string) (*IterationRecord, error) {
 
 	return &record, nil
 }
+
+// LoadAllIterationRecords loads all iteration records from the logs directory.
+func LoadAllIterationRecords(logsDir string) ([]*IterationRecord, error) {
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read logs directory: %w", err)
+	}
+
+	var records []*IterationRecord
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Only process iteration JSON files
+		name := entry.Name()
+		if len(name) < 10 || name[:10] != "iteration-" || filepath.Ext(name) != ".json" {
+			continue
+		}
+
+		path := filepath.Join(logsDir, name)
+		record, err := LoadRecord(path)
+		if err != nil {
+			continue // Skip invalid files
+		}
+
+		records = append(records, record)
+	}
+
+	return records, nil
+}

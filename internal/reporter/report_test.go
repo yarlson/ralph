@@ -498,7 +498,7 @@ func TestLoadAllIterationRecords(t *testing.T) {
 	_, err = loop.SaveRecord(logsDir, record2)
 	require.NoError(t, err)
 
-	records, err := LoadAllIterationRecords(logsDir)
+	records, err := loop.LoadAllIterationRecords(logsDir)
 	require.NoError(t, err)
 
 	assert.Len(t, records, 2)
@@ -507,14 +507,14 @@ func TestLoadAllIterationRecords(t *testing.T) {
 func TestLoadAllIterationRecordsEmptyDir(t *testing.T) {
 	logsDir := t.TempDir()
 
-	records, err := LoadAllIterationRecords(logsDir)
+	records, err := loop.LoadAllIterationRecords(logsDir)
 	require.NoError(t, err)
 
 	assert.Len(t, records, 0)
 }
 
 func TestLoadAllIterationRecordsNonExistentDir(t *testing.T) {
-	records, err := LoadAllIterationRecords("/nonexistent/dir")
+	records, err := loop.LoadAllIterationRecords("/nonexistent/dir")
 	require.NoError(t, err)
 
 	assert.Len(t, records, 0)
@@ -542,7 +542,7 @@ func TestLoadAllIterationRecordsSkipsInvalidFiles(t *testing.T) {
 	err = os.WriteFile(otherPath, []byte("{}"), 0644)
 	require.NoError(t, err)
 
-	records, err := LoadAllIterationRecords(logsDir)
+	records, err := loop.LoadAllIterationRecords(logsDir)
 	require.NoError(t, err)
 
 	// Should only include the valid iteration record

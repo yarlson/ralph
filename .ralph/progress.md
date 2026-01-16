@@ -1245,3 +1245,36 @@
 
 **Outcome**: Success - all tests pass, prompt builder fully integrated, generated prompts include all PRD-specified context (task details, acceptance criteria, verification commands, codebase patterns, git status)
 
+### 2026-01-16: ralph-align-retry-prompt (Integrate Retry Prompt Builder)
+
+**What changed:**
+
+- Modified `internal/loop/controller.go` to integrate retry prompt builder for failed iterations
+- Split `buildPrompt()` into `buildInitialPrompt()` and `buildRetryPrompt()` methods
+- `buildRetryPrompt()` detects retry attempts (attemptNumber > 1) and uses `prompt.BuildRetry()` instead of `prompt.Build()`
+- Loads user feedback from `.ralph/state/feedback-<task-id>.txt` if it exists
+- Loads most recent failed iteration record to get failure output and compute failure signature
+- Trims failure output using `verifier.TrimOutputForFeedback()` with default trim options (100 lines, 8KB)
+- Moved `LoadAllIterationRecords()` from `internal/reporter` to `internal/loop/record.go` for code reuse
+- Updated `internal/reporter/report.go` and tests to use `loop.LoadAllIterationRecords()`
+
+**Files touched:**
+
+- `internal/loop/controller.go` (added buildRetryPrompt, split buildPrompt, added imports)
+- `internal/loop/record.go` (added LoadAllIterationRecords function)
+- `internal/reporter/report.go` (updated to use loop.LoadAllIterationRecords, removed duplicate function, removed unused imports)
+- `internal/reporter/report_test.go` (updated references to loop.LoadAllIterationRecords)
+- `tasks.yaml` (marked ralph-align-retry-prompt as completed)
+
+**Learnings:**
+
+- Retry detection is based on `attemptNumber` stored in `taskAttempts` map - when > 1, it's a retry
+- User feedback from `ralph retry --feedback "..."` is stored in `.ralph/state/feedback-<task-id>.txt` and loaded for retry prompts
+- Previous failure output is loaded from the most recent failed iteration record in logs directory
+- `ComputeFailureSignature()` from gutter.go computes SHA256 hash of verification failures for tracking
+- `verifier.TrimOutputForFeedback()` formats and trims failure output preserving the tail (where errors usually appear)
+- Moving shared utility functions to the package where the types are defined (loop.IterationRecord → loop package) reduces coupling and improves reusability
+- The retry prompt builder emphasizes fix-only approach and includes failure context, user feedback, and attempt number
+
+**Outcome**: Success - all tests pass, retry prompts now include trimmed failure output, fix-only directive, user feedback when provided, and failure signature for tracking
+

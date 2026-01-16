@@ -230,7 +230,7 @@ tasks:
       Call prompt.BuildRetryPrompt on verification failure in
       internal/loop/controller.go. Include trimmed failure output,
       fix-only directive, and user feedback if provided.
-    status: open
+    status: completed
     acceptance:
       - "Retry prompts include trimmed failure output"
       - "Fix-only directive present and clear"
