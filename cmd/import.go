@@ -33,6 +33,8 @@ Example YAML format:
         - ["go", "test", "./..."]
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecated(cmd.ErrOrStderr(), "import")
+
 			if len(args) != 1 {
 				return fmt.Errorf("requires a YAML file path as argument")
 			}
