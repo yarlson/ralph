@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 
@@ -11,6 +12,7 @@ import (
 
 	cmdinternal "github.com/yarlson/ralph/cmd/internal"
 	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/git"
 	"github.com/yarlson/ralph/internal/loop"
 	"github.com/yarlson/ralph/internal/state"
 	"github.com/yarlson/ralph/internal/taskstore"
@@ -78,7 +80,11 @@ func runFix(cmd *cobra.Command, retryID, skipID, undoID, feedback, reason string
 		return runFixSkip(cmd, skipID, reason)
 	}
 
-	// TODO: Implement other fix command logic (undo)
+	// Handle --undo flag
+	if undoID != "" {
+		return runFixUndo(cmd, undoID, force)
+	}
+
 	return nil
 }
 
@@ -121,7 +127,7 @@ func runFixSkip(cmd *cobra.Command, taskID, reason string) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Task %q is already skipped\n", taskID)
 		return nil
 	case taskstore.StatusCompleted:
-		return errors.New("Cannot skip completed task")
+		return errors.New("cannot skip completed task")
 	default:
 		return fmt.Errorf("cannot skip task %q: task status is %q (must be open, failed, or blocked)", taskID, task.Status)
 	}
@@ -388,4 +394,111 @@ func runFixList(cmd *cobra.Command) error {
 	}
 
 	return nil
+}
+
+// runFixUndo reverts a specified iteration.
+func runFixUndo(cmd *cobra.Command, iterationID string, force bool) error {
+	// Get working directory
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Load iteration record
+	logsDir := state.LogsDirPath(workDir)
+	iterationFile := filepath.Join(logsDir, fmt.Sprintf("iteration-%s.json", iterationID))
+
+	// Check if iteration exists
+	if _, err := os.Stat(iterationFile); os.IsNotExist(err) {
+		return errors.New("iteration not found")
+	}
+
+	record, err := loop.LoadRecord(iterationFile)
+	if err != nil {
+		return fmt.Errorf("failed to load iteration record: %w", err)
+	}
+
+	// Check if base commit is available
+	if record.BaseCommit == "" {
+		return fmt.Errorf("iteration %q has no base commit recorded", iterationID)
+	}
+
+	// Load configuration
+	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Initialize git manager
+	gitManager := git.NewShellManager(workDir, "")
+
+	// Check for uncommitted changes
+	ctx := cmd.Context()
+	hasChanges, err := gitManager.HasChanges(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check git status: %w", err)
+	}
+
+	// Determine task to reopen (if any)
+	taskToReopen := ""
+	if record.Outcome == loop.OutcomeSuccess && record.TaskID != "" {
+		tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+		store, err := taskstore.NewLocalStore(tasksPath)
+		if err == nil {
+			task, err := store.Get(record.TaskID)
+			if err == nil && task.Status == taskstore.StatusCompleted {
+				taskToReopen = record.TaskID
+			}
+		}
+	}
+
+	// Confirm with user unless --force
+	if !force {
+		confirmInfo := cmdinternal.UndoConfirmationInfo{
+			IterationID:           iterationID,
+			CommitToResetTo:       record.BaseCommit,
+			TaskToReopen:          taskToReopen,
+			FilesToRevert:         record.FilesChanged,
+			HasUncommittedChanges: hasChanges,
+		}
+
+		confirmed, err := cmdinternal.ConfirmUndo(cmd.OutOrStdout(), cmd.InOrStdin(), confirmInfo)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Undo cancelled.\n")
+			return nil
+		}
+	}
+
+	// Perform git reset --hard to base commit
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reverting to commit %s...\n", record.BaseCommit)
+	if err := gitResetHardFix(workDir, record.BaseCommit); err != nil {
+		return fmt.Errorf("git reset failed: %w", err)
+	}
+
+	// Update task status if it was completed in this iteration
+	if taskToReopen != "" {
+		tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+		store, err := taskstore.NewLocalStore(tasksPath)
+		if err != nil {
+			return fmt.Errorf("failed to open task store: %w", err)
+		}
+
+		if err := store.UpdateStatus(taskToReopen, taskstore.StatusOpen); err != nil {
+			return fmt.Errorf("failed to update task status: %w", err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Task %q reset to open status\n", taskToReopen)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Undo completed: reverted iteration %s\n", iterationID)
+	return nil
+}
+
+// gitResetHardFix performs a git reset --hard to the given commit.
+func gitResetHardFix(workDir, commit string) error {
+	cmd := exec.Command("git", "reset", "--hard", commit)
+	cmd.Dir = workDir
+	return cmd.Run()
 }

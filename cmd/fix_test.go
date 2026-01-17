@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1010,7 +1012,7 @@ func TestFixCommand_SkipCompletedTaskError(t *testing.T) {
 
 	err = cmd.Execute()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Cannot skip completed task")
+	assert.Contains(t, err.Error(), "cannot skip completed task")
 }
 
 func TestFixCommand_SkipWithReason(t *testing.T) {
@@ -1237,4 +1239,426 @@ func TestFixCommand_SkipInProgressTaskError(t *testing.T) {
 	// in_progress tasks cannot be skipped per acceptance criteria (only open, failed, blocked)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot skip")
+}
+
+func TestFixCommand_UndoIterationNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--undo", "nonexistent", "--force"})
+
+	err = cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "iteration not found")
+}
+
+func TestFixCommand_UndoWithForce(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repo
+	require.NoError(t, runGitCommand(tmpDir, "init", "-b", "main"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.email", "test@test.com"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.name", "Test User"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "commit.gpgsign", "false"))
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("initial"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "initial"))
+
+	// Get base commit
+	baseCommit := getGitCommit(t, tmpDir)
+
+	// Make a change
+	require.NoError(t, os.WriteFile(testFile, []byte("changed"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "iteration change"))
+
+	// Create .ralph structure
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+
+	// Create task store with a completed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:          "test-task",
+		Title:       "Test Task",
+		Description: "Test task for undo",
+		Status:      taskstore.StatusCompleted,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Create iteration record
+	record := &loop.IterationRecord{
+		IterationID:  "test123",
+		TaskID:       "test-task",
+		BaseCommit:   baseCommit,
+		Outcome:      loop.OutcomeSuccess,
+		FilesChanged: []string{"test.txt"},
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--undo", "test123", "--force"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify we're back at base commit
+	currentCommit := getGitCommit(t, tmpDir)
+	assert.Equal(t, baseCommit, currentCommit)
+
+	// Verify task status was updated
+	updatedTask, err := store.Get("test-task")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusOpen, updatedTask.Status)
+
+	// Verify output
+	output := out.String()
+	assert.Contains(t, output, "Undo completed")
+	assert.Contains(t, output, "test123")
+}
+
+func TestFixCommand_UndoShorthand(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repo
+	require.NoError(t, runGitCommand(tmpDir, "init", "-b", "main"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.email", "test@test.com"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.name", "Test User"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "commit.gpgsign", "false"))
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("initial"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "initial"))
+
+	baseCommit := getGitCommit(t, tmpDir)
+
+	// Make a change
+	require.NoError(t, os.WriteFile(testFile, []byte("changed"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "iteration change"))
+
+	// Create .ralph structure
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+
+	// Create iteration record
+	record := &loop.IterationRecord{
+		IterationID: "abc123",
+		TaskID:      "task-1",
+		BaseCommit:  baseCommit,
+		Outcome:     loop.OutcomeSuccess,
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	// Use shorthand -u
+	cmd.SetArgs([]string{"fix", "-u", "abc123", "--force"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify we're back at base commit
+	currentCommit := getGitCommit(t, tmpDir)
+	assert.Equal(t, baseCommit, currentCommit)
+}
+
+func TestFixCommand_UndoShowsConfirmation(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repo
+	require.NoError(t, runGitCommand(tmpDir, "init", "-b", "main"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.email", "test@test.com"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.name", "Test User"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "commit.gpgsign", "false"))
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("initial"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "initial"))
+
+	baseCommit := getGitCommit(t, tmpDir)
+
+	// Make a change
+	require.NoError(t, os.WriteFile(testFile, []byte("changed"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "iteration change"))
+
+	// Create .ralph structure
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+
+	// Create task store with a completed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "test-task",
+		Title:     "Test Task",
+		Status:    taskstore.StatusCompleted,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Create iteration record with files changed
+	record := &loop.IterationRecord{
+		IterationID:  "conf123",
+		TaskID:       "test-task",
+		BaseCommit:   baseCommit,
+		Outcome:      loop.OutcomeSuccess,
+		FilesChanged: []string{"test.txt", "another.txt"},
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide "no" response via stdin to cancel
+	cmd.SetIn(bytes.NewReader([]byte("no\n")))
+	cmd.SetArgs([]string{"fix", "--undo", "conf123"})
+
+	err = cmd.Execute()
+	require.NoError(t, err) // Cancelled is not an error
+
+	// Verify confirmation shows expected info
+	output := out.String()
+	assert.Contains(t, output, "Commit to reset to:")
+	assert.Contains(t, output, baseCommit[:7]) // Short hash
+	assert.Contains(t, output, "Task to reopen:")
+	assert.Contains(t, output, "test-task")
+	assert.Contains(t, output, "Files to revert:")
+	assert.Contains(t, output, "test.txt")
+	assert.Contains(t, output, "another.txt")
+	assert.Contains(t, output, "cancelled")
+}
+
+func TestFixCommand_UndoWarnsUncommittedChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repo
+	require.NoError(t, runGitCommand(tmpDir, "init", "-b", "main"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.email", "test@test.com"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.name", "Test User"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "commit.gpgsign", "false"))
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("initial"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "initial"))
+
+	baseCommit := getGitCommit(t, tmpDir)
+
+	// Make a committed change
+	require.NoError(t, os.WriteFile(testFile, []byte("changed"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "iteration change"))
+
+	// Make an uncommitted change
+	require.NoError(t, os.WriteFile(testFile, []byte("uncommitted"), 0644))
+
+	// Create .ralph structure
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+
+	// Create iteration record
+	record := &loop.IterationRecord{
+		IterationID: "warn123",
+		TaskID:      "task-1",
+		BaseCommit:  baseCommit,
+		Outcome:     loop.OutcomeSuccess,
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide "no" response via stdin to cancel
+	cmd.SetIn(bytes.NewReader([]byte("no\n")))
+	cmd.SetArgs([]string{"fix", "--undo", "warn123"})
+
+	err = cmd.Execute()
+	require.NoError(t, err) // Cancelled is not an error
+
+	// Verify warning about uncommitted changes is shown
+	output := out.String()
+	assert.Contains(t, output, "WARNING")
+	assert.Contains(t, output, "uncommitted changes")
+}
+
+func TestFixCommand_UndoConfirmYes(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repo
+	require.NoError(t, runGitCommand(tmpDir, "init", "-b", "main"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.email", "test@test.com"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "user.name", "Test User"))
+	require.NoError(t, runGitCommand(tmpDir, "config", "commit.gpgsign", "false"))
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("initial"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "initial"))
+
+	baseCommit := getGitCommit(t, tmpDir)
+
+	// Make a change
+	require.NoError(t, os.WriteFile(testFile, []byte("changed"), 0644))
+	require.NoError(t, runGitCommand(tmpDir, "add", "."))
+	require.NoError(t, runGitCommand(tmpDir, "commit", "-m", "iteration change"))
+
+	// Create .ralph structure
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+
+	// Create iteration record
+	record := &loop.IterationRecord{
+		IterationID: "yes123",
+		TaskID:      "task-1",
+		BaseCommit:  baseCommit,
+		Outcome:     loop.OutcomeSuccess,
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide "yes" response via stdin
+	cmd.SetIn(bytes.NewReader([]byte("yes\n")))
+	cmd.SetArgs([]string{"fix", "--undo", "yes123"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify we're back at base commit
+	currentCommit := getGitCommit(t, tmpDir)
+	assert.Equal(t, baseCommit, currentCommit)
+
+	// Verify completion message
+	output := out.String()
+	assert.Contains(t, output, "Undo completed")
+}
+
+// Helper function to run git commands in tests
+func runGitCommand(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	return cmd.Run()
+}
+
+// Helper function to get current git commit in tests
+func getGitCommit(t *testing.T, dir string) string {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(output))
 }
