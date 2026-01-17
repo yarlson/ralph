@@ -479,3 +479,339 @@ func TestFixCommand_NonTTY_WithFlag_Works(t *testing.T) {
 	output := out.String()
 	assert.Contains(t, output, "Failed Tasks")
 }
+
+func TestFixCommand_RetryFailedTask(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--retry", "task-failed-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was reset
+	updated, err := store.Get("task-failed-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusOpen, updated.Status)
+
+	// Check output confirms retry initiated
+	output := out.String()
+	assert.Contains(t, output, "task-failed-1")
+	assert.Contains(t, output, "Retry initiated")
+}
+
+func TestFixCommand_RetryOpenTask(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create an open task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-open-1",
+		Title:     "An Open Task",
+		Status:    taskstore.StatusOpen,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--retry", "task-open-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Task should remain open
+	updated, err := store.Get("task-open-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusOpen, updated.Status)
+
+	// Check output indicates already open
+	output := out.String()
+	assert.Contains(t, output, "already open")
+}
+
+func TestFixCommand_RetryCompletedTaskError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a completed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-completed-1",
+		Title:     "A Completed Task",
+		Status:    taskstore.StatusCompleted,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--retry", "task-completed-1"})
+
+	err = cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retry")
+	assert.Contains(t, err.Error(), "completed")
+}
+
+func TestFixCommand_RetryInProgressTaskError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create an in_progress task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-inprogress-1",
+		Title:     "An In Progress Task",
+		Status:    taskstore.StatusInProgress,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--retry", "task-inprogress-1"})
+
+	err = cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retry")
+	assert.Contains(t, err.Error(), "must be failed or open")
+}
+
+func TestFixCommand_RetryWithFeedback(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	stateDir := filepath.Join(tmpDir, ".ralph", "state")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--retry", "task-failed-1", "--feedback", "Try using a different algorithm"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Check that feedback file was created
+	feedbackFile := filepath.Join(stateDir, "feedback-task-failed-1.txt")
+	content, err := os.ReadFile(feedbackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "Try using a different algorithm", string(content))
+
+	// Check output mentions feedback
+	output := out.String()
+	assert.Contains(t, output, "Feedback saved")
+}
+
+func TestFixCommand_RetryTaskNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--retry", "nonexistent-task"})
+
+	err = cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFixCommand_RetryShorthand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	// Use shorthand -r and -f
+	cmd.SetArgs([]string{"fix", "-r", "task-failed-1", "-f", "Use shorthand flags"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was reset
+	updated, err := store.Get("task-failed-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusOpen, updated.Status)
+}
