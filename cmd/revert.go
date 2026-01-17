@@ -42,6 +42,8 @@ WARNING: This will discard all uncommitted changes!`,
 }
 
 func runRevert(cmd *cobra.Command, iterationID string, force bool) error {
+	warnDeprecated(cmd.ErrOrStderr(), "revert")
+
 	// Validate required flag
 	if iterationID == "" {
 		return errors.New("--iteration flag is required")

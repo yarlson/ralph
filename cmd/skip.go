@@ -33,6 +33,8 @@ func newSkipCmd() *cobra.Command {
 }
 
 func runSkip(cmd *cobra.Command, taskID, reason string) error {
+	warnDeprecated(cmd.ErrOrStderr(), "skip")
+
 	// Validate required flag
 	if taskID == "" {
 		return errors.New("--task flag is required")

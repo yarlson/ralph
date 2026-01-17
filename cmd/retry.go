@@ -33,6 +33,8 @@ func newRetryCmd() *cobra.Command {
 }
 
 func runRetry(cmd *cobra.Command, taskID, feedback string) error {
+	warnDeprecated(cmd.ErrOrStderr(), "retry")
+
 	// Validate required flag
 	if taskID == "" {
 		return errors.New("--task flag is required")
