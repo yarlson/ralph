@@ -53,7 +53,7 @@ func TestRunCmd_NoParentTaskID(t *testing.T) {
 	err = rootCmd.Execute()
 	assert.Error(t, err)
 	// Auto-init will attempt and fail because there are no root tasks
-	assert.Contains(t, err.Error(), "no root tasks found")
+	assert.Contains(t, err.Error(), "No tasks")
 }
 
 func TestRunCmd_NonExistentParentTask(t *testing.T) {
@@ -390,7 +390,7 @@ func TestRunCmd_AutoInit_ZeroRootTasks(t *testing.T) {
 
 	err := rootCmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no root tasks found")
+	assert.Contains(t, err.Error(), "No tasks")
 }
 
 func TestRunCmd_AutoInit_MultipleRoots_Interactive(t *testing.T) {

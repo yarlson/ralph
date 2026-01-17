@@ -1,20 +1,18 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	cmdinternal "github.com/yarlson/ralph/cmd/internal"
 	"github.com/yarlson/ralph/internal/claude"
 	"github.com/yarlson/ralph/internal/config"
 	gitpkg "github.com/yarlson/ralph/internal/git"
@@ -297,24 +295,25 @@ func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) 
 		return "", false, fmt.Errorf("failed to list root tasks: %w", err)
 	}
 
-	// Handle zero roots
-	if len(rootTasks) == 0 {
-		return "", false, fmt.Errorf("no root tasks found (create tasks in .ralph/tasks/)")
+	// Convert to RootTaskOption slice for SelectRootTask
+	options := make([]cmdinternal.RootTaskOption, len(rootTasks))
+	for i, t := range rootTasks {
+		options[i] = cmdinternal.RootTaskOption{ID: t.ID, Title: t.Title}
 	}
 
-	var selectedTask *taskstore.Task
+	// Determine if stdin is a TTY
+	isTTY := isTerminal(cmd.InOrStdin())
 
-	// Handle single root
-	if len(rootTasks) == 1 {
-		selectedTask = rootTasks[0]
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found single root task: %s (%s)\n", selectedTask.Title, selectedTask.ID)
-	} else {
-		// Handle multiple roots - prompt user
-		selected, err := promptRootTaskSelection(cmd, rootTasks)
-		if err != nil {
-			return "", false, err
-		}
-		selectedTask = selected
+	// Use SelectRootTask for unified selection logic
+	selected, err := cmdinternal.SelectRootTask(cmd.OutOrStdout(), cmd.InOrStdin(), options, isTTY)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Find the full task object
+	selectedTask, err := store.Get(selected.ID)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get selected task: %w", err)
 	}
 
 	// Validate selected task has ready leaves
@@ -348,47 +347,6 @@ func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) 
 	}
 
 	return selectedTask.ID, true, nil
-}
-
-// promptRootTaskSelection shows interactive menu for root task selection
-func promptRootTaskSelection(cmd *cobra.Command, rootTasks []*taskstore.Task) (*taskstore.Task, error) {
-	// Check if TTY
-	if !isTerminal(cmd.InOrStdin()) {
-		// Format list for error message
-		var taskList string
-		for _, t := range rootTasks {
-			taskList += fmt.Sprintf("  - %s (%s)\n", t.Title, t.ID)
-		}
-		return nil, fmt.Errorf("multiple root tasks found (non-TTY):\n%s\nUse --parent <task-id> to specify which task to use", taskList)
-	}
-
-	// Display menu
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nSelect a root task:\n\n")
-	for i, t := range rootTasks {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d) %s (%s)\n", i+1, t.Title, t.ID)
-	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nEnter number (1-%d) or 'q' to quit: ", len(rootTasks))
-
-	// Read input
-	reader := bufio.NewReader(cmd.InOrStdin())
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("failed to read selection: %w", err)
-	}
-
-	response = strings.TrimSpace(strings.ToLower(response))
-
-	if response == "q" || response == "quit" {
-		return nil, fmt.Errorf("task selection cancelled")
-	}
-
-	// Parse selection
-	selection, err := strconv.Atoi(response)
-	if err != nil || selection < 1 || selection > len(rootTasks) {
-		return nil, fmt.Errorf("invalid selection: %q (expected 1-%d)", response, len(rootTasks))
-	}
-
-	return rootTasks[selection-1], nil
 }
 
 // isTerminal checks if the reader is a terminal (for interactive prompts)

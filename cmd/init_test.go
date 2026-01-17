@@ -72,7 +72,7 @@ func TestInitCommand(t *testing.T) {
 		err = cmd.Execute()
 		// Should fail with auto-init error (no root tasks)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "no root tasks found")
+		assert.Contains(t, err.Error(), "No tasks")
 	})
 
 	t.Run("--parent creates .ralph directory structure", func(t *testing.T) {
@@ -557,7 +557,8 @@ func TestInitCmd_AutoInit_SingleRootTask(t *testing.T) {
 
 	// Verify output message
 	output := outBuf.String()
-	assert.Contains(t, output, "Found single root task")
+	assert.Contains(t, output, "Initializing:")
+	assert.Contains(t, output, "Root Task 1")
 	assert.Contains(t, output, "root-1")
 }
 
@@ -573,7 +574,7 @@ func TestInitCmd_AutoInit_ZeroRootTasks(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no root tasks found")
+	assert.Contains(t, err.Error(), "No tasks")
 }
 
 func TestInitCmd_AutoInit_MultipleRoots_Interactive(t *testing.T) {

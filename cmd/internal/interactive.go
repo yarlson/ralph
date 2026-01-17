@@ -4,10 +4,74 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"golang.org/x/term"
 )
+
+// RootTaskOption represents a root task available for selection.
+type RootTaskOption struct {
+	// ID is the task identifier.
+	ID string
+	// Title is the task title.
+	Title string
+}
+
+// SelectRootTask handles root task selection for auto-initialization.
+// If there's a single task, it auto-selects with a confirmation message.
+// If there are multiple tasks and isTTY is true, shows interactive menu.
+// If there are multiple tasks and isTTY is false, returns an error with --parent hint.
+// If there are no tasks, returns an error with helpful message.
+func SelectRootTask(w io.Writer, r io.Reader, tasks []RootTaskOption, isTTY bool) (*RootTaskOption, error) {
+	// No tasks
+	if len(tasks) == 0 {
+		return nil, fmt.Errorf("No tasks. Run ralph <prd.md> or ralph <tasks.yaml>")
+	}
+
+	// Single task - auto-select with confirmation
+	if len(tasks) == 1 {
+		_, _ = fmt.Fprintf(w, "Initializing: %s (%s)\n", tasks[0].Title, tasks[0].ID)
+		return &tasks[0], nil
+	}
+
+	// Multiple tasks - non-TTY error
+	if !isTTY {
+		var taskList string
+		for _, t := range tasks {
+			taskList += fmt.Sprintf("  - %s (%s)\n", t.Title, t.ID)
+		}
+		return nil, fmt.Errorf("multiple root tasks found (non-TTY):\n%s\nUse --parent <task-id> to specify which task to use", taskList)
+	}
+
+	// Multiple tasks - interactive menu
+	_, _ = fmt.Fprintf(w, "\nSelect a root task:\n\n")
+	for i, t := range tasks {
+		_, _ = fmt.Fprintf(w, "  %d) %s (%s)\n", i+1, t.Title, t.ID)
+	}
+	_, _ = fmt.Fprintf(w, "\nEnter number (1-%d) or 'q' to quit: ", len(tasks))
+
+	// Read input
+	reader := bufio.NewReader(r)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read selection: %w", err)
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	if response == "q" || response == "quit" {
+		return nil, fmt.Errorf("task selection cancelled")
+	}
+
+	// Parse selection
+	selection, err := strconv.Atoi(response)
+	if err != nil || selection < 1 || selection > len(tasks) {
+		return nil, fmt.Errorf("invalid selection: %q (expected 1-%d)", response, len(tasks))
+	}
+
+	return &tasks[selection-1], nil
+}
 
 // FixActionType represents the type of action to perform in fix interactive mode.
 type FixActionType string
