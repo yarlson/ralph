@@ -53,13 +53,7 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	// Check if paused
-	paused, err := state.IsPaused(workDir)
-	if err == nil && paused {
-		return fmt.Errorf("ralph is paused. Use 'ralph resume' to continue")
-	}
-
-	// Load configuration
+	// Load configuration first (needed for parent task lookup)
 	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -90,6 +84,31 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 		}
 	} else {
 		parentTaskID = string(parentIDBytes)
+	}
+
+	// Check if paused - auto-resume if so
+	paused, err := state.IsPaused(workDir)
+	if err == nil && paused {
+		// Auto-resume: clear paused state and show resuming message
+		if err := state.SetPaused(workDir, false); err != nil {
+			return fmt.Errorf("failed to auto-resume: %w", err)
+		}
+
+		// Get parent task title for the message
+		tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+		store, storeErr := taskstore.NewLocalStore(tasksPath)
+		var taskTitle string
+		if storeErr == nil {
+			if parentTask, getErr := store.Get(parentTaskID); getErr == nil {
+				taskTitle = parentTask.Title
+			}
+		}
+
+		if taskTitle != "" {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Resuming: %s (%s)\n", taskTitle, parentTaskID)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Resuming: (%s)\n", parentTaskID)
+		}
 	}
 
 	// Ensure ralph directories exist
