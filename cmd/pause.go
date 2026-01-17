@@ -21,6 +21,8 @@ func newPauseCmd() *cobra.Command {
 }
 
 func runPause(cmd *cobra.Command) error {
+	warnDeprecated(cmd.ErrOrStderr(), "pause")
+
 	// Get working directory
 	workDir, err := os.Getwd()
 	if err != nil {

@@ -99,3 +99,36 @@ func TestPauseCommand_AlreadyPaused(t *testing.T) {
 	// Should still succeed but indicate already paused
 	assert.Contains(t, out.String(), "already paused")
 }
+
+func TestPauseCommand_ShowsDeprecationWarning(t *testing.T) {
+	// Set up test directory
+	tmpDir := t.TempDir()
+
+	// Create .ralph/state directory
+	stateDir := filepath.Join(tmpDir, ".ralph", "state")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	// Change to temp dir
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"pause"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Should show deprecation warning
+	assert.Contains(t, out.String(), "Deprecated:")
+	assert.Contains(t, out.String(), "Ctrl+C to stop")
+
+	// Should still execute (paused file created)
+	pausedFile := filepath.Join(stateDir, "paused")
+	_, err = os.Stat(pausedFile)
+	assert.NoError(t, err, "paused file should exist after deprecation warning")
+}

@@ -21,6 +21,8 @@ func newResumeCmd() *cobra.Command {
 }
 
 func runResume(cmd *cobra.Command) error {
+	warnDeprecated(cmd.ErrOrStderr(), "resume")
+
 	// Get working directory
 	workDir, err := os.Getwd()
 	if err != nil {

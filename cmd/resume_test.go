@@ -102,3 +102,37 @@ func TestResumeCommand_RemovesPausedFlag(t *testing.T) {
 	// Check output
 	assert.Contains(t, out.String(), "resumed")
 }
+
+func TestResumeCommand_ShowsDeprecationWarning(t *testing.T) {
+	// Set up test directory
+	tmpDir := t.TempDir()
+
+	// Create .ralph/state directory and paused file
+	stateDir := filepath.Join(tmpDir, ".ralph", "state")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+	pausedFile := filepath.Join(stateDir, "paused")
+	require.NoError(t, os.WriteFile(pausedFile, []byte{}, 0644))
+
+	// Change to temp dir
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"resume"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Should show deprecation warning
+	assert.Contains(t, out.String(), "Deprecated:")
+	assert.Contains(t, out.String(), "ralph")
+
+	// Should still execute (paused file removed)
+	_, err = os.Stat(pausedFile)
+	assert.True(t, os.IsNotExist(err), "paused file should be removed after deprecation warning")
+}
