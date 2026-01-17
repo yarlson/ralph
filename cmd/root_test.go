@@ -3,12 +3,16 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
 func TestRootCommand(t *testing.T) {
@@ -483,6 +487,147 @@ func TestRootCommand_YAMLFile_SkipsDecomposition(t *testing.T) {
 	// Should NOT contain "Analyzing PRD" or "decompose" since YAML skips decomposition
 	assert.NotContains(t, output, "Analyzing PRD")
 	assert.NotContains(t, output, "decompose")
+}
+
+// Continue and Resume Behavior Tests
+
+func TestRootCommand_ContinueResume_ParentSetWithReadyTasks_RunsLoop(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	// Write parent-task-id file (simulating parent is already set)
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	require.NoError(t, os.WriteFile(parentIDFile, []byte("root-1"), 0644))
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Should run loop immediately without auto-init messages
+	output := outBuf.String()
+	assert.Contains(t, output, "Starting ralph loop")
+	assert.NotContains(t, output, "No parent task set")
+	assert.NotContains(t, output, "Auto-initialized")
+}
+
+func TestRootCommand_ContinueResume_PausedState_AutoResumes(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	// Write parent-task-id file
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	require.NoError(t, os.WriteFile(parentIDFile, []byte("root-1"), 0644))
+
+	// Create paused file
+	pausedFile := filepath.Join(tmpDir, ".ralph", "state", "paused")
+	require.NoError(t, os.WriteFile(pausedFile, []byte{}, 0644))
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Should auto-resume and show "Resuming" message
+	output := outBuf.String()
+	assert.Contains(t, output, "Resuming:")
+	assert.Contains(t, output, "root-1")
+	assert.Contains(t, output, "Starting ralph loop")
+
+	// Verify paused file was removed
+	_, err = os.Stat(pausedFile)
+	assert.True(t, os.IsNotExist(err), "paused file should be removed after auto-resume")
+}
+
+func TestRootCommand_ContinueResume_PausedState_ShowsTaskTitle(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	// Write parent-task-id file
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	require.NoError(t, os.WriteFile(parentIDFile, []byte("root-1"), 0644))
+
+	// Create paused file
+	pausedFile := filepath.Join(tmpDir, ".ralph", "state", "paused")
+	require.NoError(t, os.WriteFile(pausedFile, []byte{}, 0644))
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Should show "Resuming: <title> (<id>)" format
+	output := outBuf.String()
+	assert.Contains(t, output, "Resuming: Root Task 1 (root-1)")
+}
+
+func TestRootCommand_ContinueResume_NoReadyTasks_ShowsCompletion(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Initialize git repository
+	require.NoError(t, exec.Command("git", "init", "-b", "main").Run())
+	require.NoError(t, exec.Command("git", "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "config", "commit.gpgsign", "false").Run())
+
+	// Create initial commit
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Test"), 0644))
+	require.NoError(t, exec.Command("git", "add", ".").Run())
+	require.NoError(t, exec.Command("git", "commit", "-m", "Initial commit").Run())
+
+	// Create .ralph directories
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "state"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "logs"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "logs", "claude"), 0755))
+
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	// Create a completed parent task
+	root := &taskstore.Task{
+		ID:        "completed-parent",
+		Title:     "Completed Parent",
+		Status:    taskstore.StatusCompleted,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	require.NoError(t, store.Save(root))
+
+	// Write parent-task-id file
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	require.NoError(t, os.WriteFile(parentIDFile, []byte("completed-parent"), 0644))
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Should show completion status
+	output := outBuf.String()
+	assert.Contains(t, output, "completed")
 }
 
 // Note: All commands have been implemented. No stub commands remaining.
