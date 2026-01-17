@@ -665,3 +665,63 @@ func TestInitCmd_AutoInit_InvalidSelection(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid selection")
 }
+
+func TestInitCmd_ShowsDeprecationWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create .ralph directory structure
+	ralphDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(ralphDir, 0755))
+
+	cmd := newInitCmd()
+	cmd.SetArgs([]string{})
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+
+	_ = cmd.Execute() // Ignore error, we just want to check stderr
+
+	// Check that deprecation warning was written to stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+	assert.Contains(t, errBuf.String(), "ralph (auto-initializes) or ralph --parent <id>")
+}
+
+func TestInitCmd_DeprecationWarningDoesNotPreventExecution(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create task store with a parent task
+	store, err := taskstore.NewLocalStore(filepath.Join(tmpDir, ".ralph", "tasks"))
+	require.NoError(t, err)
+
+	parentTask := createValidParentTask("test-feature", "Test Feature")
+	require.NoError(t, store.Save(parentTask))
+
+	// Create a leaf task under the parent
+	leafTask := createValidLeafTask("leaf-1", "Leaf Task", strPtr("test-feature"))
+	require.NoError(t, store.Save(leafTask))
+
+	cmd := newInitCmd()
+	cmd.SetArgs([]string{"--parent", "test-feature"})
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Warning should be on stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+
+	// Success output should be on stdout
+	assert.Contains(t, outBuf.String(), "Initialized ralph for parent task")
+}

@@ -36,6 +36,7 @@ func newRunCmd() *cobra.Command {
 		Short: "Run the iteration loop",
 		Long:  "Execute the iteration loop until all tasks are done or limits are reached.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecated(cmd.ErrOrStderr(), "run")
 			return runRun(cmd, once, maxIterations, branch)
 		},
 	}
