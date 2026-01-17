@@ -179,3 +179,193 @@ func TestConfirmUndo_HidesFilesWhenEmpty(t *testing.T) {
 	output := out.String()
 	assert.NotContains(t, output, "Files to revert:")
 }
+
+// FixInteractiveMode tests
+
+func TestFixInteractiveMode_ShowsIssuesList(t *testing.T) {
+	var out bytes.Buffer
+	// Input: 'q' to quit immediately
+	in := bytes.NewReader([]byte("q\n"))
+
+	issues := []FixIssue{
+		{TaskID: "task-1", Title: "First failed task", Status: "failed", Attempts: 3},
+		{TaskID: "task-2", Title: "Blocked task", Status: "blocked", Attempts: 1},
+	}
+	iterations := []FixIteration{
+		{IterationID: "iter001", TaskID: "task-1", Outcome: "failed"},
+		{IterationID: "iter002", TaskID: "task-3", Outcome: "success"},
+	}
+
+	err := FixInteractiveMode(&out, in, issues, iterations, nil)
+	require.NoError(t, err)
+
+	output := out.String()
+	// Should show issues
+	assert.Contains(t, output, "task-1")
+	assert.Contains(t, output, "First failed task")
+	assert.Contains(t, output, "failed")
+	assert.Contains(t, output, "3") // attempt count
+	assert.Contains(t, output, "task-2")
+	assert.Contains(t, output, "Blocked task")
+	// Should show iterations
+	assert.Contains(t, output, "iter001")
+	assert.Contains(t, output, "iter002")
+}
+
+func TestFixInteractiveMode_RetryCommand(t *testing.T) {
+	var out bytes.Buffer
+	// Input: 'r task-1' then 'q'
+	in := bytes.NewReader([]byte("r task-1\nq\n"))
+
+	issues := []FixIssue{
+		{TaskID: "task-1", Title: "Failed task", Status: "failed", Attempts: 2},
+	}
+	var executedAction *FixAction
+	handler := func(action *FixAction) error {
+		executedAction = action
+		return nil
+	}
+
+	err := FixInteractiveMode(&out, in, issues, nil, handler)
+	require.NoError(t, err)
+
+	require.NotNil(t, executedAction)
+	assert.Equal(t, FixActionRetry, executedAction.Type)
+	assert.Equal(t, "task-1", executedAction.TargetID)
+	assert.Empty(t, executedAction.Feedback)
+}
+
+func TestFixInteractiveMode_SkipCommand(t *testing.T) {
+	var out bytes.Buffer
+	// Input: 's task-2' then 'q'
+	in := bytes.NewReader([]byte("s task-2\nq\n"))
+
+	issues := []FixIssue{
+		{TaskID: "task-2", Title: "Blocked task", Status: "blocked", Attempts: 1},
+	}
+	var executedAction *FixAction
+	handler := func(action *FixAction) error {
+		executedAction = action
+		return nil
+	}
+
+	err := FixInteractiveMode(&out, in, issues, nil, handler)
+	require.NoError(t, err)
+
+	require.NotNil(t, executedAction)
+	assert.Equal(t, FixActionSkip, executedAction.Type)
+	assert.Equal(t, "task-2", executedAction.TargetID)
+}
+
+func TestFixInteractiveMode_UndoCommand(t *testing.T) {
+	var out bytes.Buffer
+	// Input: 'u iter001' then 'q'
+	in := bytes.NewReader([]byte("u iter001\nq\n"))
+
+	iterations := []FixIteration{
+		{IterationID: "iter001", TaskID: "task-1", Outcome: "failed"},
+	}
+	var executedAction *FixAction
+	handler := func(action *FixAction) error {
+		executedAction = action
+		return nil
+	}
+
+	err := FixInteractiveMode(&out, in, nil, iterations, handler)
+	require.NoError(t, err)
+
+	require.NotNil(t, executedAction)
+	assert.Equal(t, FixActionUndo, executedAction.Type)
+	assert.Equal(t, "iter001", executedAction.TargetID)
+}
+
+func TestFixInteractiveMode_RetryWithFeedback(t *testing.T) {
+	var out bytes.Buffer
+	// Input: 'rf task-1' - should trigger editor placeholder
+	// For testing, we'll simulate the feedback being provided
+	// Since we can't actually open an editor in tests, we'll test that
+	// rf triggers the correct action type
+	in := bytes.NewReader([]byte("rf task-1\nq\n"))
+
+	issues := []FixIssue{
+		{TaskID: "task-1", Title: "Failed task", Status: "failed", Attempts: 2},
+	}
+	var executedAction *FixAction
+	handler := func(action *FixAction) error {
+		executedAction = action
+		return nil
+	}
+
+	// Create a mock editor function for testing
+	mockEditor := func(taskID string) (string, error) {
+		return "Test feedback from editor", nil
+	}
+
+	err := FixInteractiveModeWithEditor(&out, in, issues, nil, handler, mockEditor)
+	require.NoError(t, err)
+
+	require.NotNil(t, executedAction)
+	assert.Equal(t, FixActionRetry, executedAction.Type)
+	assert.Equal(t, "task-1", executedAction.TargetID)
+	assert.Equal(t, "Test feedback from editor", executedAction.Feedback)
+}
+
+func TestFixInteractiveMode_QuitCommand(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte("q\n"))
+
+	var handlerCalled bool
+	handler := func(action *FixAction) error {
+		handlerCalled = true
+		return nil
+	}
+
+	err := FixInteractiveMode(&out, in, nil, nil, handler)
+	require.NoError(t, err)
+	assert.False(t, handlerCalled) // Handler should not be called for quit
+}
+
+func TestFixInteractiveMode_InvalidCommand(t *testing.T) {
+	var out bytes.Buffer
+	// Input: invalid command, then quit
+	in := bytes.NewReader([]byte("invalid\nq\n"))
+
+	err := FixInteractiveMode(&out, in, nil, nil, nil)
+	require.NoError(t, err)
+
+	output := out.String()
+	// Should show error message for invalid command
+	assert.Contains(t, output, "Unknown command")
+}
+
+func TestFixInteractiveMode_ShowsAttemptCounts(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte("q\n"))
+
+	issues := []FixIssue{
+		{TaskID: "task-1", Title: "Failed task", Status: "failed", Attempts: 5},
+	}
+
+	err := FixInteractiveMode(&out, in, issues, nil, nil)
+	require.NoError(t, err)
+
+	output := out.String()
+	// Should show attempt count
+	assert.Contains(t, output, "5")
+}
+
+func TestFixInteractiveMode_ShowsPrompt(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte("q\n"))
+
+	err := FixInteractiveMode(&out, in, nil, nil, nil)
+	require.NoError(t, err)
+
+	output := out.String()
+	// Should show action prompt with available commands
+	assert.Contains(t, output, "r <id>")
+	assert.Contains(t, output, "s <id>")
+	assert.Contains(t, output, "u <id>")
+	assert.Contains(t, output, "rf <id>")
+	assert.Contains(t, output, "q")
+}
