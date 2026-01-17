@@ -1,4 +1,5 @@
-package cmd
+// Package runner provides loop execution for ralph.
+package runner
 
 import (
 	"context"
@@ -9,10 +10,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/yarlson/ralph/cmd/tui"
 	"github.com/yarlson/ralph/internal/claude"
 	"github.com/yarlson/ralph/internal/config"
 	gitpkg "github.com/yarlson/ralph/internal/git"
@@ -24,77 +23,22 @@ import (
 	"github.com/yarlson/ralph/internal/verifier"
 )
 
-func newRunCmd() *cobra.Command {
-	var once bool
-	var maxIterations int
-	var branch string
-
-	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "Run the iteration loop",
-		Long:  "Execute the iteration loop until all tasks are done or limits are reached.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			warnDeprecated(cmd.ErrOrStderr(), "run")
-			return runRun(cmd, once, maxIterations, branch)
-		},
-	}
-
-	cmd.Flags().BoolVar(&once, "once", false, "run only a single iteration")
-	cmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "maximum iterations to run (0 uses config default)")
-	cmd.Flags().StringVar(&branch, "branch", "", "override branch name (default: auto-generate from parent task)")
-
-	return cmd
+// Options configures a run.
+type Options struct {
+	Once          bool
+	MaxIterations int
+	Branch        string
 }
 
-func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) error {
-	// Get working directory
-	workDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	// Load configuration first (needed for parent task lookup)
-	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Read parent task ID (or auto-initialize)
-	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
-	parentIDBytes, err := os.ReadFile(parentIDFile)
-	var parentTaskID string
-
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Attempt auto-initialization
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No parent task set. Attempting auto-initialization...\n")
-
-			autoInitID, wasAutoInit, autoErr := autoInitParentTask(cmd, workDir, cfg)
-			if autoErr != nil {
-				return autoErr
-			}
-
-			if wasAutoInit {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Auto-initialized with parent task: %s\n\n", autoInitID)
-			}
-
-			parentTaskID = autoInitID
-		} else {
-			return fmt.Errorf("failed to read parent-task-id: %w", err)
-		}
-	} else {
-		parentTaskID = string(parentIDBytes)
-	}
-
+// Run executes the main iteration loop.
+func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID string, opts Options, stdout, stderr io.Writer) error {
 	// Check if paused - auto-resume if so
 	paused, err := state.IsPaused(workDir)
 	if err == nil && paused {
-		// Auto-resume: clear paused state and show resuming message
 		if err := state.SetPaused(workDir, false); err != nil {
 			return fmt.Errorf("failed to auto-resume: %w", err)
 		}
 
-		// Get parent task title for the message
 		tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
 		store, storeErr := taskstore.NewLocalStore(tasksPath)
 		var taskTitle string
@@ -105,9 +49,9 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 		}
 
 		if taskTitle != "" {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Resuming: %s (%s)\n", taskTitle, parentTaskID)
+			_, _ = fmt.Fprintf(stdout, "Resuming: %s (%s)\n", taskTitle, parentTaskID)
 		} else {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Resuming: (%s)\n", parentTaskID)
+			_, _ = fmt.Fprintf(stdout, "Resuming: (%s)\n", parentTaskID)
 		}
 	}
 
@@ -152,13 +96,10 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	var claudeArgs []string
 	if len(cfg.Claude.Command) > 0 {
 		claudeCommand = cfg.Claude.Command[0]
-		// If command has multiple parts (e.g., ["claude", "code"]),
-		// use the first as command and rest as base args
 		if len(cfg.Claude.Command) > 1 {
 			claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
 		}
 	}
-	// Append configured args
 	claudeArgs = append(claudeArgs, cfg.Claude.Args...)
 
 	claudeRunner := claude.NewSubprocessRunner(claudeCommand, claudeLogsDir)
@@ -195,8 +136,8 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 		MaxIterations:          cfg.Loop.MaxIterations,
 		MaxMinutesPerIteration: cfg.Loop.MaxMinutesPerIteration,
 	}
-	if maxIterations > 0 {
-		budgetLimits.MaxIterations = maxIterations
+	if opts.MaxIterations > 0 {
+		budgetLimits.MaxIterations = opts.MaxIterations
 	}
 	controller.SetBudgetLimits(budgetLimits)
 
@@ -204,7 +145,7 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	gutterConfig := loop.GutterConfig{
 		MaxSameFailure:     cfg.Loop.Gutter.MaxSameFailure,
 		MaxChurnIterations: cfg.Loop.Gutter.MaxChurnCommits,
-		ChurnThreshold:     3, // Default
+		ChurnThreshold:     3,
 	}
 	controller.SetGutterConfig(gutterConfig)
 
@@ -219,8 +160,8 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	controller.SetConfigVerifyCommands(cfg.Verification.Commands)
 
 	// Configure branch override if specified
-	if branch != "" {
-		controller.SetBranchOverride(branch)
+	if opts.Branch != "" {
+		controller.SetBranchOverride(opts.Branch)
 	}
 
 	// Configure sandbox mode if enabled
@@ -229,29 +170,29 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	}
 
 	// Set up context with signal handling for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "\nReceived interrupt signal, stopping after current iteration...\n")
+		_, _ = fmt.Fprintf(stderr, "\nReceived interrupt signal, stopping after current iteration...\n")
 		cancel()
 	}()
 
 	// Run the loop
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Starting ralph loop for parent task: %s\n\n", parentTaskID)
+	_, _ = fmt.Fprintf(stdout, "Starting ralph loop for parent task: %s\n\n", parentTaskID)
 
 	var result loop.RunResult
-	if once {
+	if opts.Once {
 		result = controller.RunOnce(ctx, parentTaskID)
 	} else {
 		result = controller.RunLoop(ctx, parentTaskID)
 	}
 
 	// Output result
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s", formatRunResult(result))
+	_, _ = fmt.Fprintf(stdout, "\n%s", FormatRunResult(result))
 
 	// Return error if the outcome indicates failure
 	if result.Outcome == loop.RunOutcomeError {
@@ -261,8 +202,8 @@ func runRun(cmd *cobra.Command, once bool, maxIterations int, branch string) err
 	return nil
 }
 
-// formatRunResult formats a RunResult for CLI output.
-func formatRunResult(result loop.RunResult) string {
+// FormatRunResult formats a RunResult for CLI output.
+func FormatRunResult(result loop.RunResult) string {
 	output := fmt.Sprintf("## Run Result: %s\n\n", result.Outcome)
 	output += fmt.Sprintf("**Message**: %s\n\n", result.Message)
 
@@ -298,119 +239,39 @@ func formatRunResult(result loop.RunResult) string {
 	return output
 }
 
-// autoInitParentTask attempts automatic parent task initialization
-// Returns: (parentTaskID, wasAutoInit, error)
-func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) (string, bool, error) {
-	// Open task store
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
-	store, err := taskstore.NewLocalStore(tasksPath)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to open task store: %w", err)
-	}
-
-	// Get root tasks
-	rootTasks, err := store.ListByParent("")
-	if err != nil {
-		return "", false, fmt.Errorf("failed to list root tasks: %w", err)
-	}
-
-	// Convert to RootTaskOption slice for SelectRootTask
-	options := make([]tui.RootTaskOption, len(rootTasks))
-	for i, t := range rootTasks {
-		options[i] = tui.RootTaskOption{ID: t.ID, Title: t.Title}
-	}
-
-	// Determine if stdin is a TTY
-	isTTY := isTerminal(cmd.InOrStdin())
-
-	// Use SelectRootTask for unified selection logic
-	selected, err := tui.SelectRootTask(cmd.OutOrStdout(), cmd.InOrStdin(), options, isTTY)
-	if err != nil {
-		return "", false, err
-	}
-
-	// Find the full task object
-	selectedTask, err := store.Get(selected.ID)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to get selected task: %w", err)
-	}
-
-	// Validate selected task has ready leaves
-	if err := validateTaskHasReadyLeaves(store, selectedTask.ID); err != nil {
-		return "", false, err
-	}
-
-	// Ensure state directory exists
-	if err := state.EnsureRalphDir(workDir); err != nil {
-		return "", false, fmt.Errorf("failed to create .ralph directory: %w", err)
-	}
-
-	// Write parent-task-id file (config-specified location for backward compat)
-	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
-	if err := os.WriteFile(parentIDFile, []byte(selectedTask.ID), 0644); err != nil {
-		return "", false, fmt.Errorf("failed to write parent-task-id: %w", err)
-	}
-
-	// Write to state directory
-	if err := state.SetStoredParentTaskID(workDir, selectedTask.ID); err != nil {
-		return "", false, fmt.Errorf("failed to set stored parent task ID: %w", err)
-	}
-
-	// Initialize progress file if needed
-	progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
-	progressFile := memory.NewProgressFile(progressPath)
-	if !progressFile.Exists() {
-		if err := progressFile.Init(selectedTask.Title, selectedTask.ID); err != nil {
-			return "", false, fmt.Errorf("failed to initialize progress file: %w", err)
-		}
-	}
-
-	return selectedTask.ID, true, nil
-}
-
-// isTerminal checks if the reader is a terminal (for interactive prompts)
-func isTerminal(r io.Reader) bool {
+// IsTerminal checks if the reader is a terminal.
+func IsTerminal(r io.Reader) bool {
 	if f, ok := r.(*os.File); ok {
 		return term.IsTerminal(int(f.Fd()))
 	}
-	// For testing: if it's not a file (e.g., bytes.Buffer), assume it's interactive
-	// This allows tests to mock stdin input
 	return true
 }
 
-// validateTaskHasReadyLeaves checks that a task has at least one ready leaf descendant
-func validateTaskHasReadyLeaves(store *taskstore.LocalStore, taskID string) error {
-	// Load all tasks
+// ValidateTaskHasReadyLeaves checks that a task has at least one ready leaf descendant.
+func ValidateTaskHasReadyLeaves(store *taskstore.LocalStore, taskID string) error {
 	allTasks, err := store.List()
 	if err != nil {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
-	// Build graph
 	graph, err := selector.BuildGraph(allTasks)
 	if err != nil {
 		return fmt.Errorf("failed to build task graph: %w", err)
 	}
 
-	// Check for cycles
 	if cycle := graph.DetectCycle(); cycle != nil {
 		return fmt.Errorf("task graph contains cycle")
 	}
 
-	// Get descendants of selected root
 	descendants := getDescendantIDsOf(allTasks, taskID)
-
-	// Get ready leaves
 	readyLeaves := selector.GetReadyLeaves(allTasks, graph)
 
-	// Check if any ready leaf is a descendant
 	for _, leaf := range readyLeaves {
 		if descendants[leaf.ID] || leaf.ID == taskID {
-			return nil // Found at least one ready task
+			return nil
 		}
 	}
 
-	// Get the task to show its title in error
 	task, err := store.Get(taskID)
 	if err != nil {
 		return fmt.Errorf("no ready tasks under task %q", taskID)
@@ -419,9 +280,7 @@ func validateTaskHasReadyLeaves(store *taskstore.LocalStore, taskID string) erro
 	return fmt.Errorf("no ready tasks under root %q", task.Title)
 }
 
-// getDescendantIDsOf returns a set of all descendant task IDs under the given parent
 func getDescendantIDsOf(tasks []*taskstore.Task, parentID string) map[string]bool {
-	// Build parent-to-children map
 	children := make(map[string][]string)
 	for _, t := range tasks {
 		if t.ParentID != nil {
@@ -429,7 +288,6 @@ func getDescendantIDsOf(tasks []*taskstore.Task, parentID string) map[string]boo
 		}
 	}
 
-	// BFS to find all descendants
 	descendants := make(map[string]bool)
 	queue := children[parentID]
 

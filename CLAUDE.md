@@ -28,12 +28,17 @@ gofmt -w .              # Format
 | config     | `internal/config/`     | ralph.yaml loading                              |
 | state      | `internal/state/`      | .ralph directory management                     |
 | decomposer | `internal/decomposer/` | PRD → task YAML via Claude                      |
+| runner     | `internal/runner/`     | Loop execution orchestration                    |
+| fix        | `internal/fix/`        | Retry, skip, undo business logic                |
+| bootstrap  | `internal/bootstrap/`  | PRD/YAML bootstrap pipelines                    |
+| detect     | `internal/detect/`     | File type detection                             |
+| tui        | `cmd/tui/`             | Terminal UI components                          |
 
 ## CLI Commands
 
-`init` · `run` · `status` · `pause` · `resume` · `retry` · `skip` · `report` · `decompose` · `import` · `logs` · `revert`
+`ralph [file]` · `status` · `fix`
 
-All in `cmd/` with matching `*_test.go` files. Config: `ralph.yaml`.
+Root command accepts PRD (.md) or task (.yaml) files. Config: `ralph.yaml`.
 
 ## State Files
 
@@ -71,6 +76,16 @@ All in `cmd/` with matching `*_test.go` files. Config: `ralph.yaml`.
 - Errors returned, not panicked; wrap with `fmt.Errorf("context: %w", err)`
 
 **Don't**: `panic()`, `init()`, global state, mocks outside `*_test.go`
+
+## Anti-Patterns to Avoid
+
+**cmd/ package structure**: One file per Cobra command. Business logic belongs in `internal/` packages, not `cmd/`. The cmd package should contain only thin wrappers.
+
+**Adapter/Pipeline patterns**: Avoid creating interfaces just to wrap functions. Prefer direct function calls over interface-based dependency injection when there's only one implementation.
+
+**Slow tests**: Avoid git operations (repo creation, commits) in unit tests. Integration tests that need git should be in separate files or skipped in CI. Test execution should be fast (<5s for the entire suite).
+
+**Over-abstraction**: Don't create `Decomposer`, `Importer`, `Initializer`, `Runner` interfaces when simple functions suffice. Go favors concrete types and direct calls.
 
 ## TDD Required
 
