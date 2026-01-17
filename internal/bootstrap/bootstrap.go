@@ -1,44 +1,25 @@
-// Package bootstrap provides pipeline orchestration for Ralph initialization.
+// Package bootstrap provides initialization pipelines for Ralph.
 package bootstrap
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/decomposer"
+	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/runner"
+	"github.com/yarlson/ralph/internal/state"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
-// DecomposeResultInfo holds information about decomposition results.
-type DecomposeResultInfo struct {
-	TaskCount int
-	YAMLPath  string
-}
-
-// ImportResultInfo holds information about import results.
-type ImportResultInfo struct {
-	TaskCount int
-}
-
-// Decomposer is the interface for PRD decomposition.
-type Decomposer interface {
-	Decompose(ctx context.Context) (*DecomposeResultInfo, error)
-}
-
-// Importer is the interface for task importing.
-type Importer interface {
-	Import() (*ImportResultInfo, error)
-}
-
-// Initializer is the interface for ralph initialization.
-type Initializer interface {
-	Init() error
-}
-
-// Runner is the interface for running the ralph loop.
-type Runner interface {
-	Run(ctx context.Context) error
-}
-
-// Options contains configuration for the bootstrap pipeline.
+// Options configures a bootstrap run.
 type Options struct {
 	Once          bool
 	MaxIterations int
@@ -46,95 +27,213 @@ type Options struct {
 	Branch        string
 }
 
-// PRDPipeline orchestrates the decompose→import→init→run pipeline.
-type PRDPipeline struct {
-	decomposer  Decomposer
-	importer    Importer
-	initializer Initializer
-	runner      Runner
-	output      io.Writer
-}
+// RunFromPRD runs the full pipeline: decompose → import → init → run.
+func RunFromPRD(ctx context.Context, prdPath, workDir string, cfg *config.Config, opts Options, stdout, stderr io.Writer) error {
+	_, _ = fmt.Fprintf(stdout, "Analyzing PRD: %s\n", prdPath)
 
-// NewPRDPipeline creates a new PRD pipeline with the given dependencies.
-func NewPRDPipeline(d Decomposer, i Importer, init Initializer, r Runner, out io.Writer) *PRDPipeline {
-	return &PRDPipeline{
-		decomposer:  d,
-		importer:    i,
-		initializer: init,
-		runner:      r,
-		output:      out,
-	}
-}
-
-// Execute runs the full PRD bootstrap pipeline.
-func (p *PRDPipeline) Execute(ctx context.Context, prdPath string) error {
-	// Show analyzing message
-	_, _ = fmt.Fprintf(p.output, "Analyzing PRD: %s\n", prdPath)
-
-	// Step 1: Decompose
-	result, err := p.decomposer.Decompose(ctx)
+	// Step 1: Decompose PRD to YAML
+	yamlPath, err := decomposePRD(ctx, prdPath, workDir, cfg, stdout)
 	if err != nil {
 		return err
 	}
 
-	// Show task count summary
-	_, _ = fmt.Fprintf(p.output, "Generated %d tasks\n", result.TaskCount)
-
-	// Step 2: Import
-	_, err = p.importer.Import()
-	if err != nil {
+	// Step 2: Import tasks
+	if err := importTasks(yamlPath, cfg, stdout); err != nil {
 		return err
 	}
 
-	// Step 3: Init
-	err = p.initializer.Init()
+	// Step 3: Initialize
+	parentTaskID, err := initRalph(workDir, cfg, opts.Parent, stdout)
 	if err != nil {
 		return err
 	}
 
 	// Step 4: Run
-	return p.runner.Run(ctx)
-}
-
-// YAMLPipeline orchestrates the import→init→run pipeline for .yaml/.yml files.
-// It skips the decomposition step entirely since tasks are already defined.
-type YAMLPipeline struct {
-	importer    Importer
-	initializer Initializer
-	runner      Runner
-	output      io.Writer
-}
-
-// NewYAMLPipeline creates a new YAML pipeline with the given dependencies.
-func NewYAMLPipeline(i Importer, init Initializer, r Runner, out io.Writer) *YAMLPipeline {
-	return &YAMLPipeline{
-		importer:    i,
-		initializer: init,
-		runner:      r,
-		output:      out,
+	runOpts := runner.Options{
+		Once:          opts.Once,
+		MaxIterations: opts.MaxIterations,
+		Branch:        opts.Branch,
 	}
+	return runner.Run(ctx, workDir, cfg, parentTaskID, runOpts, stdout, stderr)
 }
 
-// Execute runs the YAML bootstrap pipeline (import→init→run).
-func (p *YAMLPipeline) Execute(ctx context.Context, yamlPath string) error {
-	// Show initializing message
-	_, _ = fmt.Fprintf(p.output, "Initializing from YAML: %s\n", yamlPath)
+// RunFromYAML runs the pipeline: import → init → run.
+func RunFromYAML(ctx context.Context, yamlPath, workDir string, cfg *config.Config, opts Options, stdout, stderr io.Writer) error {
+	_, _ = fmt.Fprintf(stdout, "Initializing from YAML: %s\n", yamlPath)
 
-	// Step 1: Import
-	result, err := p.importer.Import()
-	if err != nil {
+	// Step 1: Import tasks
+	if err := importTasks(yamlPath, cfg, stdout); err != nil {
 		return err
 	}
 
-	// Show task count summary
-	_, _ = fmt.Fprintf(p.output, "Imported %d tasks\n", result.TaskCount)
-
-	// Step 2: Init
-	err = p.initializer.Init()
+	// Step 2: Initialize
+	parentTaskID, err := initRalph(workDir, cfg, opts.Parent, stdout)
 	if err != nil {
 		return err
 	}
 
 	// Step 3: Run
-	return p.runner.Run(ctx)
+	runOpts := runner.Options{
+		Once:          opts.Once,
+		MaxIterations: opts.MaxIterations,
+		Branch:        opts.Branch,
+	}
+	return runner.Run(ctx, workDir, cfg, parentTaskID, runOpts, stdout, stderr)
+}
+
+func decomposePRD(ctx context.Context, prdPath, workDir string, cfg *config.Config, output io.Writer) (string, error) {
+	claudeLogsDir := filepath.Join(workDir, ".ralph", "logs", "claude")
+	if err := os.MkdirAll(claudeLogsDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create Claude logs directory: %w", err)
+	}
+
+	claudeCommand := "claude"
+	var claudeArgs []string
+	if len(cfg.Claude.Command) > 0 {
+		claudeCommand = cfg.Claude.Command[0]
+		if len(cfg.Claude.Command) > 1 {
+			claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
+		}
+	}
+	claudeArgs = append(claudeArgs, cfg.Claude.Args...)
+
+	claudeRunner := claude.NewSubprocessRunner(claudeCommand, claudeLogsDir)
+	if len(claudeArgs) > 0 {
+		claudeRunner = claudeRunner.WithBaseArgs(claudeArgs)
+	}
+
+	dec := decomposer.NewDecomposer(claudeRunner)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	_, _ = fmt.Fprintf(output, "Using Claude to analyze and generate tasks...\n")
+
+	req := decomposer.DecomposeRequest{
+		PRDPath: prdPath,
+		WorkDir: workDir,
+	}
+
+	result, err := dec.Decompose(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("decomposition failed: %w", err)
+	}
+
+	outputPath := filepath.Join(workDir, "tasks.yaml")
+	if err := os.WriteFile(outputPath, []byte(result.YAMLContent), 0644); err != nil {
+		return "", fmt.Errorf("failed to write tasks file: %w", err)
+	}
+
+	taskCount := countTasksInYAML(result.YAMLContent)
+
+	_, _ = fmt.Fprintf(output, "✓ Generated %d tasks: %s\n", taskCount, outputPath)
+	_, _ = fmt.Fprintf(output, "  Session: %s\n", result.SessionID)
+	_, _ = fmt.Fprintf(output, "  Model: %s\n", result.Model)
+	_, _ = fmt.Fprintf(output, "  Cost: $%.4f\n\n", result.TotalCostUSD)
+
+	return outputPath, nil
+}
+
+func importTasks(yamlPath string, cfg *config.Config, output io.Writer) error {
+	_, _ = fmt.Fprintf(output, "Importing tasks into store...\n")
+
+	store, err := taskstore.NewLocalStore(cfg.Tasks.Path)
+	if err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+
+	result, err := taskstore.ImportFromYAML(store, yamlPath)
+	if err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(output, "✓ Imported %d task(s)\n", result.Imported)
+
+	if len(result.Errors) > 0 {
+		_, _ = fmt.Fprintf(output, "\n%d error(s) occurred during import:\n", len(result.Errors))
+		for _, impErr := range result.Errors {
+			_, _ = fmt.Fprintf(output, "  - Task %q: %s\n", impErr.ID, impErr.Reason)
+		}
+	}
+
+	allTasks, err := store.List()
+	if err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+
+	lintResult := taskstore.LintTaskSet(allTasks)
+	if !lintResult.Valid {
+		if err := lintResult.Error(); err != nil {
+			return fmt.Errorf("import failed: task validation failed:\n%w", err)
+		}
+	}
+
+	_, _ = fmt.Fprintln(output)
+	return nil
+}
+
+func initRalph(workDir string, cfg *config.Config, parentID string, output io.Writer) (string, error) {
+	_, _ = fmt.Fprintf(output, "Initializing ralph...\n")
+
+	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	store, err := taskstore.NewLocalStore(tasksPath)
+	if err != nil {
+		return "", fmt.Errorf("init failed: %w", err)
+	}
+
+	var parentTaskID string
+	if parentID != "" {
+		parentTaskID = parentID
+	} else {
+		rootTasks, err := store.ListByParent("")
+		if err != nil {
+			return "", fmt.Errorf("init failed: %w", err)
+		}
+		if len(rootTasks) == 0 {
+			return "", fmt.Errorf("init failed: no root tasks found")
+		}
+		parentTaskID = rootTasks[0].ID
+	}
+
+	parentTask, err := store.Get(parentTaskID)
+	if err != nil {
+		return "", fmt.Errorf("init failed: parent task %q not found", parentTaskID)
+	}
+
+	if err := state.EnsureRalphDir(workDir); err != nil {
+		return "", fmt.Errorf("init failed: %w", err)
+	}
+
+	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+	if err := os.WriteFile(parentIDFile, []byte(parentTaskID), 0644); err != nil {
+		return "", fmt.Errorf("init failed: %w", err)
+	}
+
+	if err := state.SetStoredParentTaskID(workDir, parentTaskID); err != nil {
+		return "", fmt.Errorf("init failed: %w", err)
+	}
+
+	progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
+	progressFile := memory.NewProgressFile(progressPath)
+	if !progressFile.Exists() {
+		if err := progressFile.Init(parentTask.Title, parentTaskID); err != nil {
+			return "", fmt.Errorf("init failed: %w", err)
+		}
+	}
+
+	_, _ = fmt.Fprintf(output, "✓ Initialized with parent task: %s (%s)\n\n", parentTask.Title, parentTaskID)
+
+	return parentTaskID, nil
+}
+
+func countTasksInYAML(content string) int {
+	count := 0
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- id:") || strings.HasPrefix(trimmed, "id:") {
+			count++
+		}
+	}
+	return count
 }
