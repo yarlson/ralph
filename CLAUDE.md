@@ -1,90 +1,78 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Ralph orchestrates Claude Code for autonomous feature delivery via a loop: select ready task → delegate → verify → commit → repeat.
 
-## Project Overview
-
-Ralph is a Go-based harness that orchestrates Claude Code for autonomous, iterative feature delivery. It executes a "Ralph Wiggum loop": select ready task → delegate to Claude Code → verify → commit → repeat.
-
-The harness does not write code—it is a deterministic executor, verifier, and state manager. Claude Code is the only coding agent.
-
-## Build and Development Commands
+## Commands
 
 ```bash
-# Build
-go build ./...
-
-# Run tests
-go test ./...
-
-# Run a single test
-go test -run TestName ./path/to/package
-
-# Lint (uses golangci-lint)
-golangci-lint run
-
-# Format
-gofmt -w .
+go build ./...          # Build
+go test ./...           # Test all
+go test -run TestName ./internal/pkg  # Test specific
+golangci-lint run       # Lint
+gofmt -w .              # Format
 ```
 
-## Architecture
+## Package Map
 
-### Core Components (in `internal/`)
+| Package    | Location               | Purpose                                         |
+| ---------- | ---------------------- | ----------------------------------------------- |
+| taskstore  | `internal/taskstore/`  | Task model, YAML persistence, validation        |
+| selector   | `internal/selector/`   | Dependency graph, ready leaf selection          |
+| claude     | `internal/claude/`     | Subprocess execution, NDJSON streaming          |
+| verifier   | `internal/verifier/`   | Test/lint/typecheck runners                     |
+| git        | `internal/git/`        | Branch creation, commits                        |
+| memory     | `internal/memory/`     | Progress file, AGENTS.md discovery              |
+| loop       | `internal/loop/`       | Iteration controller, budgets, gutter detection |
+| reporter   | `internal/reporter/`   | Status display, reports                         |
+| prompt     | `internal/prompt/`     | Task context building                           |
+| config     | `internal/config/`     | ralph.yaml loading                              |
+| state      | `internal/state/`      | .ralph directory management                     |
+| decomposer | `internal/decomposer/` | PRD → task YAML via Claude                      |
 
-- **TaskStore**: Task persistence and retrieval (`.ralph/tasks/`)
-- **Selector**: Ready leaf task selection with dependency resolution
-- **ClaudeRunner**: Claude Code subprocess execution and NDJSON stream parsing
-- **Verifier**: Runs verification commands (typecheck, test, lint)
-- **GitManager**: Branch creation, commits after verified changes
-- **MemoryManager**: Progress file (`.ralph/progress.md`) and AGENTS.md management
-- **LoopController**: Iteration orchestration, budgets, gutter detection
-- **Reporter**: Status and report generation
+## CLI Commands
 
-### Claude Code Integration
+`init` · `run` · `status` · `pause` · `resume` · `retry` · `skip` · `report` · `decompose` · `import` · `logs` · `revert`
 
-ClaudeRunner executes Claude Code as a subprocess with `--output-format="stream-json"`. Key parsing:
+All in `cmd/` with matching `*_test.go` files. Config: `ralph.yaml`.
 
-- `system/init`: Extract `session_id`, `model`, `cwd`
-- `assistant/message`: Accumulate streamed text
-- `result/success` or `result/error`: Terminal event with `result`, `total_cost_usd`, `usage`
+## State Files
 
-Raw NDJSON logs go to `.ralph/logs/claude/`.
-
-### State Files
-
-- `.ralph/tasks/`: Task store (JSON)
-- `.ralph/state/claude-session.json`: Session IDs
-- `.ralph/state/budget.json`: Cost and iteration tracking
-- `.ralph/progress.md`: Feature-specific patterns and iteration history
-- `.ralph/logs/`: Iteration logs and Claude NDJSON output
+```
+.ralph/
+├── tasks/          # Task YAML files
+├── state/          # Session, budget, pause flag
+├── logs/           # Iteration + Claude NDJSON logs
+├── progress.md     # Iteration history
+└── archive/        # Old iterations
+```
 
 ## Code Style
 
-Follow Effective Go and Go Proverbs. Key principles:
+**Go idioms**: Effective Go, Go Proverbs.
 
-- **Interfaces on consumers**: Define interfaces where they're used, not where types are implemented
-- **Accept interfaces, return structs**: Functions should accept interface parameters and return concrete types
-- **Small interfaces**: Prefer single-method interfaces; compose larger behaviors
-- **DRY/KISS/YAGNI**: No premature abstraction; solve the problem at hand
-- **Error handling**: Return errors; don't panic. Wrap errors with context using `fmt.Errorf("context: %w", err)`
-- **Testing**: Use `testify/assert` and `testify/require`. Table-driven tests preferred.
+- Interfaces at call site, not definition site
+- Accept interfaces, return structs
+- Single-method interfaces; compose for larger behaviors
+- Errors returned, not panicked; wrap with `fmt.Errorf("context: %w", err)`
 
-## Test-Driven Development (TDD)
+## TDD Required
 
-**TDD is mandatory for all new code.** Follow the red-green-refactor cycle:
+Red → Green → Refactor. No production code without a failing test first.
 
-1. **Red**: Write a failing test first that defines the expected behavior
-2. **Green**: Write the minimum code necessary to make the test pass
-3. **Refactor**: Clean up the code while keeping tests green
+```bash
+# Cycle
+go test -run TestNewFeature ./internal/pkg  # Red: fails
+# Write minimal implementation
+go test -run TestNewFeature ./internal/pkg  # Green: passes
+# Refactor, keep green
+```
 
-Rules:
+Use `testify/assert` and `testify/require`. Table-driven tests preferred.
 
-- No production code without a corresponding test written first
-- Run tests after each change to verify the cycle
-- Commit tests and implementation together
+## Principles
 
-## CLI
+**DRY**: Extract only when duplication is proven, not predicted.
 
-Built with Cobra. Commands: `ralph init`, `ralph run`, `ralph status`, `ralph pause`, `ralph resume`, `ralph retry`, `ralph skip`, `ralph report`.
+**KISS**: Simplest solution that works. No clever abstractions.
 
-Configuration: `ralph.yaml` at repo root.
+**YAGNI**: Solve today's problem. Delete speculative code.
