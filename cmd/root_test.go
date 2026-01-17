@@ -376,4 +376,113 @@ func TestRootCommand_PRDFile_WithoutDryRunTriggersBootstrap(t *testing.T) {
 	assert.Contains(t, output, "prd.md")
 }
 
+// YAML Bootstrap Pipeline Tests
+
+func TestRootCommand_YAMLFile_DryRunShowsImportMessage(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+
+	// Create a task YAML file with task markers
+	yamlPath := filepath.Join(tmpDir, "tasks.yaml")
+	yamlContent := "id: task-001\ntitle: Do something\nstatus: open"
+	err := os.WriteFile(yamlPath, []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	cmd := NewRootCmd()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{"--dry-run", yamlPath})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	output := outBuf.String()
+	assert.Contains(t, output, "[dry-run]")
+	assert.Contains(t, output, "import")
+	assert.Contains(t, output, "task")
+	assert.Contains(t, output, "tasks.yaml")
+}
+
+func TestRootCommand_YAMLFile_WithoutDryRunTriggersBootstrap(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create a task YAML file with proper structure
+	yamlPath := filepath.Join(tmpDir, "tasks.yaml")
+	yamlContent := `tasks:
+  - id: root-task
+    title: Root Task
+    status: open
+    children:
+      - id: child-task
+        title: Child Task
+        status: open
+`
+	err = os.WriteFile(yamlPath, []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	// Create minimal .ralph structure
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755))
+
+	cmd := NewRootCmd()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{yamlPath})
+
+	// Execute - it should start the YAML bootstrap pipeline
+	_ = cmd.Execute()
+	// We expect an error because the full loop won't work, but it should trigger the bootstrap
+	output := outBuf.String()
+
+	// The bootstrap pipeline should at least start and show "Initializing from YAML"
+	assert.Contains(t, output, "Initializing")
+	assert.Contains(t, output, "tasks.yaml")
+}
+
+func TestRootCommand_YAMLFile_SkipsDecomposition(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create a task YAML file with proper structure
+	yamlPath := filepath.Join(tmpDir, "tasks.yaml")
+	yamlContent := `tasks:
+  - id: root-task
+    title: Root Task
+    status: open
+    children:
+      - id: child-task
+        title: Child Task
+        status: open
+`
+	err = os.WriteFile(yamlPath, []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	// Create minimal .ralph structure
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755))
+
+	cmd := NewRootCmd()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{yamlPath})
+
+	// Execute
+	_ = cmd.Execute()
+	output := outBuf.String()
+
+	// Should NOT contain "Analyzing PRD" or "decompose" since YAML skips decomposition
+	assert.NotContains(t, output, "Analyzing PRD")
+	assert.NotContains(t, output, "decompose")
+}
+
 // Note: All commands have been implemented. No stub commands remaining.

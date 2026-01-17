@@ -149,9 +149,14 @@ func runRoot(cmd *cobra.Command, args []string) error {
 			}
 			return nil
 		}
-		// TODO: Implement actual task import (will be done in future task)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Detected task file: %s\n", filePath)
-		return fmt.Errorf("task import not yet implemented via root command")
+		// Run YAML bootstrap pipeline: import → init → run (no decompose)
+		opts := &cmdinternal.BootstrapOptions{
+			Once:          rootOnce,
+			MaxIterations: rootMaxIterations,
+			Parent:        rootParent,
+			Branch:        rootBranch,
+		}
+		return runBootstrapFromYAML(cmd, filePath, opts)
 
 	default:
 		return fmt.Errorf("unknown file type: cannot determine if %s is a PRD or task file", filePath)
