@@ -41,6 +41,7 @@ delegate to Claude Code → verify → commit → repeat.`,
 	rootCmd.AddCommand(newSkipCmd())
 	rootCmd.AddCommand(newReportCmd())
 	rootCmd.AddCommand(newRevertCmd())
+	rootCmd.AddCommand(newFixCmd())
 
 	return rootCmd
 }
