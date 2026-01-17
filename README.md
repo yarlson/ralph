@@ -305,4 +305,4 @@ go test ./...
 
 ## License
 
-Not documented.
+[MIT](LICENSE)
