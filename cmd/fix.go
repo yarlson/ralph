@@ -68,7 +68,78 @@ func runFix(cmd *cobra.Command, retryID, skipID, undoID, feedback, reason string
 		}
 	}
 
-	// TODO: Implement other fix command logic (retry, skip, undo)
+	// Handle --retry flag
+	if retryID != "" {
+		return runFixRetry(cmd, retryID, feedback)
+	}
+
+	// TODO: Implement other fix command logic (skip, undo)
+	return nil
+}
+
+// runFixRetry resets a task to open status for retry.
+func runFixRetry(cmd *cobra.Command, taskID, feedback string) error {
+	// Get working directory
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Load configuration
+	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Open task store
+	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	store, err := taskstore.NewLocalStore(tasksPath)
+	if err != nil {
+		return fmt.Errorf("failed to open task store: %w", err)
+	}
+
+	// Get the task
+	task, err := store.Get(taskID)
+	if err != nil {
+		var notFoundErr *taskstore.NotFoundError
+		if errors.As(err, &notFoundErr) {
+			return fmt.Errorf("task %q not found", taskID)
+		}
+		return fmt.Errorf("failed to get task: %w", err)
+	}
+
+	// Validate task state - can only retry failed or open tasks
+	switch task.Status {
+	case taskstore.StatusFailed:
+		// OK to retry
+	case taskstore.StatusOpen:
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Task %q is already open\n", taskID)
+		return nil
+	case taskstore.StatusCompleted:
+		return fmt.Errorf("cannot retry task %q: task is completed", taskID)
+	default:
+		return fmt.Errorf("cannot retry task %q: task status is %q (must be failed or open)", taskID, task.Status)
+	}
+
+	// Reset task status to open
+	if err := store.UpdateStatus(taskID, taskstore.StatusOpen); err != nil {
+		return fmt.Errorf("failed to update task status: %w", err)
+	}
+
+	// Save feedback if provided
+	if feedback != "" {
+		if err := state.EnsureRalphDir(workDir); err != nil {
+			return fmt.Errorf("failed to ensure .ralph directory: %w", err)
+		}
+
+		feedbackFile := filepath.Join(state.StateDirPath(workDir), fmt.Sprintf("feedback-%s.txt", taskID))
+		if err := os.WriteFile(feedbackFile, []byte(feedback), 0644); err != nil {
+			return fmt.Errorf("failed to write feedback file: %w", err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Feedback saved for task %q\n", taskID)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Retry initiated: task %q reset to open status\n", taskID)
 	return nil
 }
 
