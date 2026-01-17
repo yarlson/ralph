@@ -41,6 +41,8 @@ Example:
   ralph decompose docs/prd.md --import
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecated(cmd.ErrOrStderr(), "decompose")
+
 			if len(args) != 1 {
 				return fmt.Errorf("requires a PRD file path as argument")
 			}

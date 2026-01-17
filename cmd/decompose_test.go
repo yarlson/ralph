@@ -95,3 +95,26 @@ func TestDecomposeCmd_Examples(t *testing.T) {
 	assert.Contains(t, cmd.Long, "--output")
 	assert.Contains(t, cmd.Long, "--import")
 }
+
+func TestDecomposeCmd_ShowsDeprecationWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create .ralph directory structure
+	ralphDir := filepath.Join(tmpDir, ".ralph")
+	require.NoError(t, os.MkdirAll(ralphDir, 0755))
+
+	cmd := newDecomposeCmd()
+	// File doesn't need to exist for the deprecation warning to be printed
+	cmd.SetArgs([]string{"nonexistent-prd.md"})
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+
+	_ = cmd.Execute() // Ignore error, we just want to check stderr
+
+	// Check that deprecation warning was written to stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+	assert.Contains(t, errBuf.String(), "ralph <prd.md>")
+}

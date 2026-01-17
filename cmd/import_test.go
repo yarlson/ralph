@@ -271,3 +271,63 @@ func TestImportCmd_AtomicImport(t *testing.T) {
 	assert.Contains(t, output, "Successfully imported 2 task(s)")
 	assert.Contains(t, output, "1 error(s) occurred during import")
 }
+
+func TestImportCmd_ShowsDeprecationWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create .ralph directory structure
+	ralphDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(ralphDir, 0755))
+
+	cmd := newImportCmd()
+	// File doesn't need to exist for the deprecation warning to be printed
+	cmd.SetArgs([]string{"nonexistent.yaml"})
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+
+	_ = cmd.Execute() // Ignore error, we just want to check stderr
+
+	// Check that deprecation warning was written to stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+	assert.Contains(t, errBuf.String(), "ralph <tasks.yaml>")
+}
+
+func TestImportCmd_DeprecationWarningDoesNotPreventExecution(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create .ralph directory structure
+	ralphDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(ralphDir, 0755))
+
+	// Create valid YAML file
+	yamlContent := `tasks:
+  - id: task-1
+    title: Test Task
+    description: A test task
+    verify:
+      - ["go", "test"]
+`
+	yamlFile := filepath.Join(tmpDir, "tasks.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+
+	cmd := newImportCmd()
+	cmd.SetArgs([]string{yamlFile})
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Check that deprecation warning was written to stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+	assert.Contains(t, errBuf.String(), "ralph <tasks.yaml>")
+
+	// Check that command executed successfully
+	assert.Contains(t, outBuf.String(), "Successfully imported 1 task(s)")
+}
