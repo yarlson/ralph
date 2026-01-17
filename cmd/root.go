@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	cmdinternal "github.com/yarlson/ralph/cmd/internal"
 )
 
 var cfgFile string
@@ -13,20 +16,47 @@ func GetConfigFile() string {
 	return cfgFile
 }
 
+// Root command flags
+var (
+	rootOnce          bool
+	rootMaxIterations int
+	rootParent        string
+	rootBranch        string
+	rootDryRun        bool
+)
+
 // NewRootCmd creates the root command for ralph CLI
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:   "ralph",
+		Use:   "ralph [file]",
 		Short: "Ralph Wiggum Loop Harness for autonomous feature delivery",
 		Long: `Ralph is a Go-based harness that orchestrates Claude Code for autonomous,
 iterative feature delivery. It executes a "Ralph Wiggum loop": select ready task →
-delegate to Claude Code → verify → commit → repeat.`,
+delegate to Claude Code → verify → commit → repeat.
+
+Optionally, you can provide a file argument:
+  - A PRD .md file to decompose into tasks
+  - A task .yaml file to import tasks`,
 		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
+		RunE:         runRoot,
 	}
 
 	// Persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "ralph.yaml",
 		"config file (default is ralph.yaml)")
+
+	// Root command flags for file handling
+	rootCmd.Flags().BoolVarP(&rootOnce, "once", "1", false,
+		"run only a single iteration")
+	rootCmd.Flags().IntVarP(&rootMaxIterations, "max-iterations", "n", 0,
+		"maximum iterations to run (0 uses config default)")
+	rootCmd.Flags().StringVarP(&rootParent, "parent", "p", "",
+		"explicit parent task ID")
+	rootCmd.Flags().StringVarP(&rootBranch, "branch", "b", "",
+		"git branch override")
+	rootCmd.Flags().BoolVar(&rootDryRun, "dry-run", false,
+		"show what would be done without executing")
 
 	// Add subcommands
 	rootCmd.AddCommand(newInitCmd())
@@ -44,6 +74,80 @@ delegate to Claude Code → verify → commit → repeat.`,
 	rootCmd.AddCommand(newFixCmd())
 
 	return rootCmd
+}
+
+// runRoot handles the root command execution with optional file argument
+func runRoot(cmd *cobra.Command, args []string) error {
+	// If no file argument provided, just show help
+	if len(args) == 0 {
+		return cmd.Help()
+	}
+
+	// File argument provided - validate and detect type
+	filePath := args[0]
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fmt.Errorf("file not found: %s", filePath)
+	}
+
+	// Read file content for type detection
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Detect file type using bootstrap.DetectFileType
+	fileType := cmdinternal.DetectFileType(string(content))
+
+	switch fileType {
+	case cmdinternal.FileTypePRD:
+		if rootDryRun {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Would decompose PRD file: %s\n", filePath)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Detected file type: prd\n")
+			if rootParent != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Parent task: %s\n", rootParent)
+			}
+			if rootBranch != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Branch: %s\n", rootBranch)
+			}
+			if rootOnce {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Would run once\n")
+			}
+			if rootMaxIterations > 0 {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Max iterations: %d\n", rootMaxIterations)
+			}
+			return nil
+		}
+		// TODO: Implement actual PRD decomposition (will be done in future task)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Detected PRD file: %s\n", filePath)
+		return fmt.Errorf("PRD decomposition not yet implemented via root command")
+
+	case cmdinternal.FileTypeTasks:
+		if rootDryRun {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Would import task file: %s\n", filePath)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Detected file type: tasks\n")
+			if rootParent != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Parent task: %s\n", rootParent)
+			}
+			if rootBranch != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Branch: %s\n", rootBranch)
+			}
+			if rootOnce {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Would run once\n")
+			}
+			if rootMaxIterations > 0 {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Max iterations: %d\n", rootMaxIterations)
+			}
+			return nil
+		}
+		// TODO: Implement actual task import (will be done in future task)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Detected task file: %s\n", filePath)
+		return fmt.Errorf("task import not yet implemented via root command")
+
+	default:
+		return fmt.Errorf("unknown file type: cannot determine if %s is a PRD or task file", filePath)
+	}
 }
 
 // Execute runs the root command
