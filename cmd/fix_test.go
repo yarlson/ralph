@@ -363,3 +363,119 @@ func TestFixCommand_ListShorthand(t *testing.T) {
 	assert.Contains(t, output, "Blocked Tasks")
 	assert.Contains(t, output, "Recent Iterations")
 }
+
+func TestFixCommand_NonTTY_NoFlags_ShowsError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	failedTask := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(failedTask))
+
+	// Create an iteration record
+	record := &loop.IterationRecord{
+		IterationID: "abc12345",
+		TaskID:      "task-1",
+		StartTime:   now.Add(-10 * time.Minute),
+		EndTime:     now.Add(-5 * time.Minute),
+		Outcome:     loop.OutcomeFailed,
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix"})
+
+	// Simulate non-TTY by providing a non-TTY stdin via file
+	// Create a temp file to use as stdin (non-TTY)
+	tmpFile, err := os.CreateTemp("", "non-tty-*")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
+	cmd.SetIn(tmpFile)
+
+	err = cmd.Execute()
+	require.Error(t, err)
+
+	// Check error message
+	assert.Contains(t, err.Error(), "interactive mode requires TTY")
+
+	// Check stderr/stdout contains guidance
+	output := out.String()
+	assert.Contains(t, output, "Fixable Issues:")
+	assert.Contains(t, output, "task-failed-1")
+	assert.Contains(t, output, "ralph fix --retry")
+	assert.Contains(t, output, "Recent Iterations:")
+	assert.Contains(t, output, "abc12345")
+	assert.Contains(t, output, "ralph fix --undo")
+}
+
+func TestFixCommand_NonTTY_WithFlag_Works(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--list"})
+
+	// Simulate non-TTY by providing a non-TTY stdin via file
+	tmpFile, err := os.CreateTemp("", "non-tty-*")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
+	cmd.SetIn(tmpFile)
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// With --list flag, should work even in non-TTY
+	output := out.String()
+	assert.Contains(t, output, "Failed Tasks")
+}
