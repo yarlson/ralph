@@ -12,11 +12,23 @@ import (
 )
 
 func TestRootCommand(t *testing.T) {
-	t.Run("executes without error", func(t *testing.T) {
+	t.Run("auto-initializes when run without args", func(t *testing.T) {
+		// When run without args and no tasks, should error with helpful message
+		tmpDir := t.TempDir()
+		oldWd, err := os.Getwd()
+		require.NoError(t, err)
+		defer func() { _ = os.Chdir(oldWd) }()
+		require.NoError(t, os.Chdir(tmpDir))
+
+		// Create minimal .ralph structure
+		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755))
+
 		cmd := NewRootCmd()
 		cmd.SetArgs([]string{})
-		err := cmd.Execute()
-		assert.NoError(t, err)
+		err = cmd.Execute()
+		// Should fail because no tasks
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "No tasks")
 	})
 
 	t.Run("has --config flag", func(t *testing.T) {
@@ -186,6 +198,121 @@ func TestRootCommand_FileValidation(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "file not found")
 	})
+}
+
+// Auto-initialization tests for root command (no file argument)
+
+func TestRootCommand_AutoInit_SingleRootTask(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify parent-task-id was written
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", string(data))
+
+	// Verify auto-init message appeared with correct format
+	output := outBuf.String()
+	assert.Contains(t, output, "Initializing:")
+	assert.Contains(t, output, "Root Task 1")
+	assert.Contains(t, output, "root-1")
+}
+
+func TestRootCommand_AutoInit_NoRootTasks(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 0)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	// Should show helpful error message
+	assert.Contains(t, err.Error(), "No tasks")
+	assert.Contains(t, err.Error(), "ralph")
+}
+
+func TestRootCommand_AutoInit_MultipleRoots_Interactive(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 3)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	// Mock stdin with selection "2\n"
+	inputBuf := bytes.NewBufferString("2\n")
+	cmd.SetIn(inputBuf)
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify correct task was selected
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-2", string(data))
+
+	// Verify menu was displayed
+	output := outBuf.String()
+	assert.Contains(t, output, "Select a root task")
+	assert.Contains(t, output, "1) Root Task 1")
+	assert.Contains(t, output, "2) Root Task 2")
+	assert.Contains(t, output, "3) Root Task 3")
+}
+
+func TestRootCommand_AutoInit_MultipleRoots_NonTTY(t *testing.T) {
+	_, _ = setupTestDirWithTasks(t, 3)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once"})
+
+	// Use default stdin (non-TTY in test env, don't set stdin)
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	// Should show helpful error with --parent hint
+	assert.Contains(t, err.Error(), "multiple root tasks found")
+	assert.Contains(t, err.Error(), "--parent")
+}
+
+func TestRootCommand_AutoInit_WithExplicitParent(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 2)
+
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"--once", "--parent", "root-2"})
+
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify specified parent was used
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-2", string(data))
 }
 
 // Note: All commands have been implemented. No stub commands remaining.

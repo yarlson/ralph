@@ -3,10 +3,13 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	cmdinternal "github.com/yarlson/ralph/cmd/internal"
+	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/state"
 )
 
 var cfgFile string
@@ -78,9 +81,9 @@ Optionally, you can provide a file argument:
 
 // runRoot handles the root command execution with optional file argument
 func runRoot(cmd *cobra.Command, args []string) error {
-	// If no file argument provided, just show help
+	// If no file argument provided, auto-initialize and run
 	if len(args) == 0 {
-		return cmd.Help()
+		return runRootAutoInit(cmd)
 	}
 
 	// File argument provided - validate and detect type
@@ -148,6 +151,43 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	default:
 		return fmt.Errorf("unknown file type: cannot determine if %s is a PRD or task file", filePath)
 	}
+}
+
+// runRootAutoInit handles auto-initialization when ralph is run without a file argument
+func runRootAutoInit(cmd *cobra.Command) error {
+	// If explicit parent is provided, write parent-task-id file first
+	if rootParent != "" {
+		workDir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+
+		// Load configuration to get parent-task-id file location
+		cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// Ensure ralph directories exist
+		if err := state.EnsureRalphDir(workDir); err != nil {
+			return fmt.Errorf("failed to create .ralph directory: %w", err)
+		}
+
+		// Write parent-task-id file
+		parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+		if err := os.WriteFile(parentIDFile, []byte(rootParent), 0644); err != nil {
+			return fmt.Errorf("failed to write parent-task-id: %w", err)
+		}
+
+		// Also write to state directory
+		if err := state.SetStoredParentTaskID(workDir, rootParent); err != nil {
+			return fmt.Errorf("failed to set stored parent task ID: %w", err)
+		}
+	}
+
+	// Delegate to runRun with the root flags
+	// runRun already handles auto-initialization
+	return runRun(cmd, rootOnce, rootMaxIterations, rootBranch)
 }
 
 // Execute runs the root command

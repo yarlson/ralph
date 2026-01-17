@@ -369,3 +369,113 @@ func TestFixInteractiveMode_ShowsPrompt(t *testing.T) {
 	assert.Contains(t, output, "rf <id>")
 	assert.Contains(t, output, "q")
 }
+
+// SelectRootTask tests
+
+func TestSelectRootTask_SingleTask(t *testing.T) {
+	var out bytes.Buffer
+	// No input needed - single task is auto-selected
+	in := bytes.NewReader([]byte{})
+
+	tasks := []RootTaskOption{
+		{ID: "root-1", Title: "My Feature"},
+	}
+
+	selected, err := SelectRootTask(&out, in, tasks, true) // isTTY=true
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", selected.ID)
+	assert.Equal(t, "My Feature", selected.Title)
+
+	// Verify confirmation message
+	output := out.String()
+	assert.Contains(t, output, "Initializing:")
+	assert.Contains(t, output, "My Feature")
+	assert.Contains(t, output, "root-1")
+}
+
+func TestSelectRootTask_MultipleTasksTTY(t *testing.T) {
+	var out bytes.Buffer
+	// User selects option 2
+	in := bytes.NewReader([]byte("2\n"))
+
+	tasks := []RootTaskOption{
+		{ID: "root-1", Title: "Feature One"},
+		{ID: "root-2", Title: "Feature Two"},
+		{ID: "root-3", Title: "Feature Three"},
+	}
+
+	selected, err := SelectRootTask(&out, in, tasks, true) // isTTY=true
+	require.NoError(t, err)
+	assert.Equal(t, "root-2", selected.ID)
+	assert.Equal(t, "Feature Two", selected.Title)
+
+	// Verify menu was displayed
+	output := out.String()
+	assert.Contains(t, output, "Select a root task")
+	assert.Contains(t, output, "1) Feature One")
+	assert.Contains(t, output, "2) Feature Two")
+	assert.Contains(t, output, "3) Feature Three")
+}
+
+func TestSelectRootTask_MultipleTasksNonTTY(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte{})
+
+	tasks := []RootTaskOption{
+		{ID: "root-1", Title: "Feature One"},
+		{ID: "root-2", Title: "Feature Two"},
+	}
+
+	selected, err := SelectRootTask(&out, in, tasks, false) // isTTY=false
+	require.Error(t, err)
+	assert.Nil(t, selected)
+	// Should hint at --parent flag
+	assert.Contains(t, err.Error(), "multiple root tasks")
+	assert.Contains(t, err.Error(), "--parent")
+	// Should list the tasks
+	assert.Contains(t, err.Error(), "Feature One")
+	assert.Contains(t, err.Error(), "root-1")
+}
+
+func TestSelectRootTask_NoTasks(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte{})
+
+	tasks := []RootTaskOption{}
+
+	selected, err := SelectRootTask(&out, in, tasks, true)
+	require.Error(t, err)
+	assert.Nil(t, selected)
+	assert.Contains(t, err.Error(), "No tasks")
+	assert.Contains(t, err.Error(), "ralph")
+}
+
+func TestSelectRootTask_UserCancels(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte("q\n"))
+
+	tasks := []RootTaskOption{
+		{ID: "root-1", Title: "Feature One"},
+		{ID: "root-2", Title: "Feature Two"},
+	}
+
+	selected, err := SelectRootTask(&out, in, tasks, true)
+	require.Error(t, err)
+	assert.Nil(t, selected)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+func TestSelectRootTask_InvalidSelection(t *testing.T) {
+	var out bytes.Buffer
+	in := bytes.NewReader([]byte("99\n"))
+
+	tasks := []RootTaskOption{
+		{ID: "root-1", Title: "Feature One"},
+		{ID: "root-2", Title: "Feature Two"},
+	}
+
+	selected, err := SelectRootTask(&out, in, tasks, true)
+	require.Error(t, err)
+	assert.Nil(t, selected)
+	assert.Contains(t, err.Error(), "invalid selection")
+}

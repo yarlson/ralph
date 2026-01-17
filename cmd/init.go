@@ -3,12 +3,15 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
+	cmdinternal "github.com/yarlson/ralph/cmd/internal"
 	"github.com/yarlson/ralph/internal/config"
 	"github.com/yarlson/ralph/internal/memory"
 	"github.com/yarlson/ralph/internal/selector"
@@ -265,30 +268,35 @@ func autoInitParentTaskForInit(cmd *cobra.Command, workDir string, cfg *config.C
 		return "", false, fmt.Errorf("failed to list root tasks: %w", err)
 	}
 
-	// Handle zero roots
-	if len(rootTasks) == 0 {
-		return "", false, fmt.Errorf("no root tasks found (create tasks in .ralph/tasks/)")
+	// Convert to RootTaskOption slice for SelectRootTask
+	options := make([]cmdinternal.RootTaskOption, len(rootTasks))
+	for i, t := range rootTasks {
+		options[i] = cmdinternal.RootTaskOption{ID: t.ID, Title: t.Title}
 	}
 
-	var selectedTask *taskstore.Task
+	// Determine if stdin is a TTY
+	isTTY := isTerminalInit(cmd.InOrStdin())
 
-	// Handle single root
-	if len(rootTasks) == 1 {
-		selectedTask = rootTasks[0]
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found single root task: %s (%s)\n", selectedTask.Title, selectedTask.ID)
-	} else {
-		// Handle multiple roots - prompt user
-		selected, err := promptRootTaskSelection(cmd, rootTasks)
-		if err != nil {
-			return "", false, err
-		}
-		selectedTask = selected
-	}
-
-	// Validate selected task has ready leaves
-	if err := validateTaskHasReadyLeaves(store, selectedTask.ID); err != nil {
+	// Use SelectRootTask for unified selection logic
+	selected, err := cmdinternal.SelectRootTask(cmd.OutOrStdout(), cmd.InOrStdin(), options, isTTY)
+	if err != nil {
 		return "", false, err
 	}
 
-	return selectedTask.ID, true, nil
+	// Validate selected task has ready leaves
+	if err := validateTaskHasReadyLeaves(store, selected.ID); err != nil {
+		return "", false, err
+	}
+
+	return selected.ID, true, nil
+}
+
+// isTerminalInit checks if the reader is a terminal (for interactive prompts)
+func isTerminalInit(r io.Reader) bool {
+	if f, ok := r.(*os.File); ok {
+		return term.IsTerminal(int(f.Fd()))
+	}
+	// For testing: if it's not a file (e.g., bytes.Buffer), assume it's interactive
+	// This allows tests to mock stdin input
+	return true
 }
