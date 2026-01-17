@@ -28,7 +28,7 @@ func TestRootCommand(t *testing.T) {
 		err = cmd.Execute()
 		// Should fail because no tasks
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "No tasks")
+		assert.Contains(t, err.Error(), "no tasks")
 	})
 
 	t.Run("has --config flag", func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestRootCommand_AutoInit_NoRootTasks(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	// Should show helpful error message
-	assert.Contains(t, err.Error(), "No tasks")
+	assert.Contains(t, err.Error(), "no tasks")
 	assert.Contains(t, err.Error(), "ralph")
 }
 
@@ -313,6 +313,67 @@ func TestRootCommand_AutoInit_WithExplicitParent(t *testing.T) {
 	data, err := os.ReadFile(parentIDFile)
 	require.NoError(t, err)
 	assert.Equal(t, "root-2", string(data))
+}
+
+// PRD Bootstrap Pipeline Tests
+
+func TestRootCommand_PRDFile_DryRunShowsAnalyzingMessage(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+
+	// Create a PRD file with Objectives section
+	prdPath := filepath.Join(tmpDir, "feature.md")
+	prdContent := "# Feature Spec\n\n## Objectives\n\nBuild an awesome feature."
+	err := os.WriteFile(prdPath, []byte(prdContent), 0644)
+	require.NoError(t, err)
+
+	cmd := NewRootCmd()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{"--dry-run", prdPath})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	output := outBuf.String()
+	assert.Contains(t, output, "[dry-run]")
+	assert.Contains(t, output, "decompose")
+	assert.Contains(t, output, "PRD")
+	assert.Contains(t, output, "feature.md")
+}
+
+func TestRootCommand_PRDFile_WithoutDryRunTriggersBootstrap(t *testing.T) {
+	// Create temp directory
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create a PRD file
+	prdPath := filepath.Join(tmpDir, "prd.md")
+	prdContent := "# Product\n\n## Objectives\n\nBuild something."
+	err = os.WriteFile(prdPath, []byte(prdContent), 0644)
+	require.NoError(t, err)
+
+	// Create minimal .ralph structure
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".ralph", "tasks"), 0755))
+
+	cmd := NewRootCmd()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{prdPath})
+
+	// This will fail because Claude isn't available, but it should show the "Analyzing PRD" message
+	_ = cmd.Execute()
+	// We expect an error because Claude isn't running, but it should have triggered the bootstrap
+	output := outBuf.String()
+
+	// The bootstrap pipeline should at least start and show "Analyzing PRD"
+	assert.Contains(t, output, "Analyzing PRD")
+	assert.Contains(t, output, "prd.md")
 }
 
 // Note: All commands have been implemented. No stub commands remaining.

@@ -446,7 +446,7 @@ func TestSelectRootTask_NoTasks(t *testing.T) {
 	selected, err := SelectRootTask(&out, in, tasks, true)
 	require.Error(t, err)
 	assert.Nil(t, selected)
-	assert.Contains(t, err.Error(), "No tasks")
+	assert.Contains(t, err.Error(), "no tasks")
 	assert.Contains(t, err.Error(), "ralph")
 }
 

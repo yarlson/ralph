@@ -122,9 +122,14 @@ func runRoot(cmd *cobra.Command, args []string) error {
 			}
 			return nil
 		}
-		// TODO: Implement actual PRD decomposition (will be done in future task)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Detected PRD file: %s\n", filePath)
-		return fmt.Errorf("PRD decomposition not yet implemented via root command")
+		// Run full PRD bootstrap pipeline: decompose → import → init → run
+		opts := &cmdinternal.BootstrapOptions{
+			Once:          rootOnce,
+			MaxIterations: rootMaxIterations,
+			Parent:        rootParent,
+			Branch:        rootBranch,
+		}
+		return runBootstrapFromPRD(cmd, filePath, opts)
 
 	case cmdinternal.FileTypeTasks:
 		if rootDryRun {
