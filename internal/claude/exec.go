@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/yarlson/ralph/internal/stream"
 )
 
 // SubprocessRunner executes Claude Code as a subprocess and parses its NDJSON output.
@@ -23,6 +25,10 @@ type SubprocessRunner struct {
 	logsDir string
 	// TaskID is an optional task identifier to include in log filenames.
 	TaskID string
+	// streamOutput enables real-time streaming of Claude's text output to stdout.
+	streamOutput bool
+	// streamOpts configures the stream processor when streamOutput is enabled.
+	streamOpts stream.Options
 }
 
 // NewSubprocessRunner creates a new SubprocessRunner with the given command and logs directory.
@@ -38,6 +44,13 @@ func NewSubprocessRunner(command, logsDir string) *SubprocessRunner {
 // This allows configuring the runner with args like ["code", "--preset=fast"].
 func (r *SubprocessRunner) WithBaseArgs(baseArgs []string) *SubprocessRunner {
 	r.baseArgs = baseArgs
+	return r
+}
+
+// WithStreamOutput enables real-time streaming of Claude's text output to stdout.
+func (r *SubprocessRunner) WithStreamOutput(opts stream.Options) *SubprocessRunner {
+	r.streamOutput = true
+	r.streamOpts = opts
 	return r
 }
 
@@ -91,12 +104,39 @@ func (r *SubprocessRunner) Run(ctx context.Context, req ClaudeRequest) (*ClaudeR
 		return nil, fmt.Errorf("failed to start command %s: %w", r.command, err)
 	}
 
-	// Tee stdout to both the log file and a buffer for parsing
+	// Buffer for parsing after command completes
 	var stdoutBuf bytes.Buffer
-	teeReader := io.TeeReader(stdoutPipe, &stdoutBuf)
 
-	// Copy stdout to log file while command runs
-	_, copyErr := io.Copy(logFile, teeReader)
+	// Set up writers: always write to log file and parse buffer
+	writers := []io.Writer{logFile, &stdoutBuf}
+
+	// If streaming is enabled, also process through the stream processor
+	var streamPipeWriter *io.PipeWriter
+	var streamDone chan struct{}
+
+	if r.streamOutput {
+		var streamPipeReader *io.PipeReader
+		streamPipeReader, streamPipeWriter = io.Pipe()
+		writers = append(writers, streamPipeWriter)
+		streamDone = make(chan struct{})
+
+		// Process stream in background goroutine
+		go func() {
+			defer close(streamDone)
+			processor := stream.NewProcessor(os.Stdout, r.streamOpts)
+			_ = processor.Process(streamPipeReader) // Error is EOF-based, not critical
+		}()
+	}
+
+	// Tee stdout to all writers
+	multiWriter := io.MultiWriter(writers...)
+	_, copyErr := io.Copy(multiWriter, stdoutPipe)
+
+	// Close the stream pipe writer to signal EOF to processor
+	if streamPipeWriter != nil {
+		_ = streamPipeWriter.Close()
+		<-streamDone // Wait for stream processor to finish
+	}
 
 	// Wait for command to complete
 	waitErr := cmd.Wait()
