@@ -815,3 +815,426 @@ func TestFixCommand_RetryShorthand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, taskstore.StatusOpen, updated.Status)
 }
+
+func TestFixCommand_SkipOpenTask(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create an open task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-open-1",
+		Title:     "An Open Task",
+		Status:    taskstore.StatusOpen,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-open-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was set to skipped
+	updated, err := store.Get("task-open-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusSkipped, updated.Status)
+
+	// Check output confirms task skipped
+	output := out.String()
+	assert.Contains(t, output, "task-open-1")
+	assert.Contains(t, output, "skipped")
+}
+
+func TestFixCommand_SkipFailedTask(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-failed-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was set to skipped
+	updated, err := store.Get("task-failed-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusSkipped, updated.Status)
+}
+
+func TestFixCommand_SkipBlockedTask(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a blocked task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-blocked-1",
+		Title:     "A Blocked Task",
+		Status:    taskstore.StatusBlocked,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-blocked-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was set to skipped
+	updated, err := store.Get("task-blocked-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusSkipped, updated.Status)
+}
+
+func TestFixCommand_SkipCompletedTaskError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a completed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-completed-1",
+		Title:     "A Completed Task",
+		Status:    taskstore.StatusCompleted,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-completed-1"})
+
+	err = cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Cannot skip completed task")
+}
+
+func TestFixCommand_SkipWithReason(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	stateDir := filepath.Join(tmpDir, ".ralph", "state")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create an open task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-open-1",
+		Title:     "An Open Task",
+		Status:    taskstore.StatusOpen,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-open-1", "--reason", "Not needed for MVP"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Check that reason file was created
+	reasonFile := filepath.Join(stateDir, "skip-reason-task-open-1.txt")
+	content, err := os.ReadFile(reasonFile)
+	require.NoError(t, err)
+	assert.Equal(t, "Not needed for MVP", string(content))
+}
+
+func TestFixCommand_SkipTaskNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "nonexistent-task"})
+
+	err = cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFixCommand_SkipShorthand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create an open task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-open-1",
+		Title:     "An Open Task",
+		Status:    taskstore.StatusOpen,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	// Use shorthand -s
+	cmd.SetArgs([]string{"fix", "-s", "task-open-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was set to skipped
+	updated, err := store.Get("task-open-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusSkipped, updated.Status)
+}
+
+func TestFixCommand_SkipAlreadySkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a skipped task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-skipped-1",
+		Title:     "A Skipped Task",
+		Status:    taskstore.StatusSkipped,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-skipped-1"})
+
+	err = cmd.Execute()
+	require.NoError(t, err) // Should succeed but indicate already skipped
+
+	// Check output indicates already skipped
+	assert.Contains(t, out.String(), "already skipped")
+}
+
+func TestFixCommand_SkipInProgressTaskError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create an in_progress task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-inprogress-1",
+		Title:     "An In Progress Task",
+		Status:    taskstore.StatusInProgress,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"fix", "--skip", "task-inprogress-1"})
+
+	err = cmd.Execute()
+	// in_progress tasks cannot be skipped per acceptance criteria (only open, failed, blocked)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot skip")
+}
