@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	cmdinternal "github.com/yarlson/ralph/cmd/internal"
+	"github.com/yarlson/ralph/cmd/tui"
 	"github.com/yarlson/ralph/internal/claude"
 	"github.com/yarlson/ralph/internal/config"
 	gitpkg "github.com/yarlson/ralph/internal/git"
@@ -315,16 +315,16 @@ func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) 
 	}
 
 	// Convert to RootTaskOption slice for SelectRootTask
-	options := make([]cmdinternal.RootTaskOption, len(rootTasks))
+	options := make([]tui.RootTaskOption, len(rootTasks))
 	for i, t := range rootTasks {
-		options[i] = cmdinternal.RootTaskOption{ID: t.ID, Title: t.Title}
+		options[i] = tui.RootTaskOption{ID: t.ID, Title: t.Title}
 	}
 
 	// Determine if stdin is a TTY
 	isTTY := isTerminal(cmd.InOrStdin())
 
 	// Use SelectRootTask for unified selection logic
-	selected, err := cmdinternal.SelectRootTask(cmd.OutOrStdout(), cmd.InOrStdin(), options, isTTY)
+	selected, err := tui.SelectRootTask(cmd.OutOrStdout(), cmd.InOrStdin(), options, isTTY)
 	if err != nil {
 		return "", false, err
 	}

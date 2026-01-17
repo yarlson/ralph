@@ -1,4 +1,5 @@
-package internal
+// Package tui provides terminal user interface components for Ralph CLI.
+package tui
 
 import (
 	"bufio"
