@@ -20,7 +20,7 @@ Convert an input PRD (Markdown) into a single YAML file named task.yaml containi
 CORE PRINCIPLES (DRY / KISS / YAGNI)
 - Prefer the smallest task graph that is still complete and testable.
 - Avoid speculative tasks ("maybe", "future", "nice to have") unless explicitly in-scope in the PRD.
-- Minimize dependencies; add dependsOn only when sequencing is required.
+- Use dependsOn liberally to enforce correct execution order (see DEPENDENCY ORDERING below).
 - Do not duplicate work across tasks; keep each task's responsibility crisp.
 
 INPUT
@@ -67,6 +67,17 @@ MAPPING RULES (PRD → TASKS)
 - Rollout Plan becomes tasks (feature flagging, phased enablement, migration, monitoring, rollback steps) when applicable.
 - Non-goals must NOT generate tasks.
 
+DEPENDENCY ORDERING (STRICT SEQUENCING)
+- Scaffolding/infrastructure tasks (project setup, config, CI/CD, database schema) MUST complete before feature work begins. Add dependsOn from all feature tasks to relevant scaffolding tasks.
+- Within an epic, order tasks sequentially via dependsOn chains when execution order matters. Do NOT leave sibling tasks independent if one logically precedes another.
+- Prefer explicit dependsOn over relying on priority labels or creation order. The task selector only considers tasks whose dependencies are ALL completed.
+- Example: if "setup-database" and "implement-user-auth" are both P0, implement-user-auth MUST have dependsOn: [setup-database].
+- Rule: A task should only become "ready" (no unmet dependencies) when it is truly safe to execute in isolation.
+- Common dependency chains:
+  - project-scaffold → core-models → api-endpoints → ui-components
+  - ci-setup → all tasks with verify commands
+  - database-schema → any task that reads/writes data
+
 LABELS (LIGHTWEIGHT, CONSISTENT)
 Use labels sparingly; recommended keys:
 - area: e.g., core, api, ui, infra, security, analytics, docs, qa, rollout
@@ -81,6 +92,9 @@ Verify mentally that:
 - Leaf tasks have acceptance criteria (unless purely administrative).
 - The graph includes tasks for: core delivery, testing/verification, observability (if metrics exist), and rollout (if phased).
 - No duplicated tasks; no speculative "future" work outside PRD scope.
+- Scaffolding/infrastructure tasks have NO dependencies on feature tasks (they come first).
+- Feature tasks depend on their prerequisite scaffolding tasks via dependsOn.
+- Sibling tasks within an epic are chained via dependsOn when order matters (not left as independent parallels).
 
 FAILURE MODE (MISSING INFO)
 If the PRD lacks critical details needed to produce a valid plan:

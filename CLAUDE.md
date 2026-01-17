@@ -52,6 +52,15 @@ All in `cmd/` with matching `*_test.go` files. Config: `ralph.yaml`.
 
 `blocked` = waiting on dependency. `failed` can retry → `in_progress`.
 
+## Terminology
+
+| Term      | Meaning                                                              |
+| --------- | -------------------------------------------------------------------- |
+| Leaf task | Task with no children (executable unit)                              |
+| Ready     | Open leaf with all dependencies completed                            |
+| Iteration | One cycle: select → delegate → verify → commit                       |
+| Gutter    | Unproductive loop detection (repeated failures, churn, oscillations) |
+
 ## Code Style
 
 **Go idioms**: Effective Go, Go Proverbs.
