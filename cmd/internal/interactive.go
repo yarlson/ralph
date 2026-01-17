@@ -26,7 +26,7 @@ type RootTaskOption struct {
 func SelectRootTask(w io.Writer, r io.Reader, tasks []RootTaskOption, isTTY bool) (*RootTaskOption, error) {
 	// No tasks
 	if len(tasks) == 0 {
-		return nil, fmt.Errorf("No tasks. Run ralph <prd.md> or ralph <tasks.yaml>")
+		return nil, fmt.Errorf("no tasks: run ralph <prd.md> or ralph <tasks.yaml>")
 	}
 
 	// Single task - auto-select with confirmation
