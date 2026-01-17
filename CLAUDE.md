@@ -46,6 +46,12 @@ All in `cmd/` with matching `*_test.go` files. Config: `ralph.yaml`.
 └── archive/        # Old iterations
 ```
 
+## Task Lifecycle
+
+`open` → `in_progress` → `completed` | `failed` | `skipped`
+
+`blocked` = waiting on dependency. `failed` can retry → `in_progress`.
+
 ## Code Style
 
 **Go idioms**: Effective Go, Go Proverbs.
@@ -54,6 +60,8 @@ All in `cmd/` with matching `*_test.go` files. Config: `ralph.yaml`.
 - Accept interfaces, return structs
 - Single-method interfaces; compose for larger behaviors
 - Errors returned, not panicked; wrap with `fmt.Errorf("context: %w", err)`
+
+**Don't**: `panic()`, `init()`, global state, mocks outside `*_test.go`
 
 ## TDD Required
 
