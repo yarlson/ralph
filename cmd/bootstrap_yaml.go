@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cmdinternal "github.com/yarlson/ralph/cmd/internal"
+	"github.com/yarlson/ralph/internal/bootstrap"
 	"github.com/yarlson/ralph/internal/config"
 	"github.com/yarlson/ralph/internal/memory"
 	"github.com/yarlson/ralph/internal/state"
@@ -24,7 +24,7 @@ type yamlImporter struct {
 	output   io.Writer
 }
 
-func (i *yamlImporter) Import() (*cmdinternal.ImportResultInfo, error) {
+func (i *yamlImporter) Import() (*bootstrap.ImportResultInfo, error) {
 	_, _ = fmt.Fprintf(i.output, "Importing tasks into store...\n")
 
 	// Create task store
@@ -63,7 +63,7 @@ func (i *yamlImporter) Import() (*cmdinternal.ImportResultInfo, error) {
 
 	_, _ = fmt.Fprintln(i.output)
 
-	return &cmdinternal.ImportResultInfo{
+	return &bootstrap.ImportResultInfo{
 		TaskCount: result.Imported,
 	}, nil
 }
@@ -151,7 +151,7 @@ func (r *yamlRunner) Run(ctx context.Context) error {
 }
 
 // runBootstrapFromYAML runs the YAML bootstrap pipeline (import→init→run).
-func runBootstrapFromYAML(cmd *cobra.Command, yamlPath string, opts *cmdinternal.BootstrapOptions) error {
+func runBootstrapFromYAML(cmd *cobra.Command, yamlPath string, opts *bootstrap.Options) error {
 	// Get working directory
 	workDir, err := os.Getwd()
 	if err != nil {
@@ -206,7 +206,7 @@ func runBootstrapFromYAML(cmd *cobra.Command, yamlPath string, opts *cmdinternal
 	}
 
 	// Create and execute pipeline
-	pipeline := cmdinternal.NewYAMLPipeline(
+	pipeline := bootstrap.NewYAMLPipeline(
 		importerAdapter,
 		initializerAdapter,
 		runnerAdapter,

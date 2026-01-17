@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cmdinternal "github.com/yarlson/ralph/cmd/internal"
+	"github.com/yarlson/ralph/cmd/tui"
 	"github.com/yarlson/ralph/internal/config"
 	"github.com/yarlson/ralph/internal/git"
 	"github.com/yarlson/ralph/internal/loop"
@@ -43,7 +43,7 @@ func isTTYForFix() bool {
 	if forceTTYValue != nil {
 		return *forceTTYValue
 	}
-	return cmdinternal.IsInteractive(os.Stdin.Fd())
+	return tui.IsInteractive(os.Stdin.Fd())
 }
 
 func newFixCmd() *cobra.Command {
@@ -484,7 +484,7 @@ func runFixUndo(cmd *cobra.Command, iterationID string, force bool) error {
 
 	// Confirm with user unless --force
 	if !force {
-		confirmInfo := cmdinternal.UndoConfirmationInfo{
+		confirmInfo := tui.UndoConfirmationInfo{
 			IterationID:           iterationID,
 			CommitToResetTo:       record.BaseCommit,
 			TaskToReopen:          taskToReopen,
@@ -492,7 +492,7 @@ func runFixUndo(cmd *cobra.Command, iterationID string, force bool) error {
 			HasUncommittedChanges: hasChanges,
 		}
 
-		confirmed, err := cmdinternal.ConfirmUndo(cmd.OutOrStdout(), cmd.InOrStdin(), confirmInfo)
+		confirmed, err := tui.ConfirmUndo(cmd.OutOrStdout(), cmd.InOrStdin(), confirmInfo)
 		if err != nil {
 			return err
 		}
@@ -570,12 +570,12 @@ func runFixInteractive(cmd *cobra.Command, force bool) error {
 	}
 
 	// Build issues list (failed and blocked tasks)
-	var issues []cmdinternal.FixIssue
+	var issues []tui.FixIssue
 	for _, task := range tasks {
 		if task.Status == taskstore.StatusFailed || task.Status == taskstore.StatusBlocked {
 			// Count attempts from iteration records
 			attempts := countTaskAttempts(iterations, task.ID)
-			issues = append(issues, cmdinternal.FixIssue{
+			issues = append(issues, tui.FixIssue{
 				TaskID:   task.ID,
 				Title:    task.Title,
 				Status:   string(task.Status),
@@ -594,9 +594,9 @@ func runFixInteractive(cmd *cobra.Command, force bool) error {
 	}
 
 	// Build iterations list
-	var fixIterations []cmdinternal.FixIteration
+	var fixIterations []tui.FixIteration
 	for _, iter := range iterations {
-		fixIterations = append(fixIterations, cmdinternal.FixIteration{
+		fixIterations = append(fixIterations, tui.FixIteration{
 			IterationID: iter.IterationID,
 			TaskID:      iter.TaskID,
 			Outcome:     string(iter.Outcome),
@@ -604,7 +604,7 @@ func runFixInteractive(cmd *cobra.Command, force bool) error {
 	}
 
 	// Create action handler
-	handler := func(action *cmdinternal.FixAction) error {
+	handler := func(action *tui.FixAction) error {
 		return executeFixAction(cmd, workDir, cfg, store, action, force)
 	}
 
@@ -614,7 +614,7 @@ func runFixInteractive(cmd *cobra.Command, force bool) error {
 	}
 
 	// Run interactive mode
-	return cmdinternal.FixInteractiveModeWithEditor(
+	return tui.FixInteractiveModeWithEditor(
 		cmd.OutOrStdout(),
 		cmd.InOrStdin(),
 		issues,
@@ -636,13 +636,13 @@ func countTaskAttempts(iterations []*loop.IterationRecord, taskID string) int {
 }
 
 // executeFixAction executes a fix action from interactive mode.
-func executeFixAction(cmd *cobra.Command, workDir string, cfg *config.Config, store *taskstore.LocalStore, action *cmdinternal.FixAction, force bool) error {
+func executeFixAction(cmd *cobra.Command, workDir string, cfg *config.Config, store *taskstore.LocalStore, action *tui.FixAction, force bool) error {
 	switch action.Type {
-	case cmdinternal.FixActionRetry:
+	case tui.FixActionRetry:
 		return runFixRetry(cmd, action.TargetID, action.Feedback)
-	case cmdinternal.FixActionSkip:
+	case tui.FixActionSkip:
 		return runFixSkip(cmd, action.TargetID, "")
-	case cmdinternal.FixActionUndo:
+	case tui.FixActionUndo:
 		return runFixUndo(cmd, action.TargetID, force)
 	default:
 		return fmt.Errorf("unknown action type: %s", action.Type)

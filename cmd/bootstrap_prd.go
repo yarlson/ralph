@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cmdinternal "github.com/yarlson/ralph/cmd/internal"
+	"github.com/yarlson/ralph/internal/bootstrap"
 	"github.com/yarlson/ralph/internal/claude"
 	"github.com/yarlson/ralph/internal/config"
 	"github.com/yarlson/ralph/internal/decomposer"
@@ -28,7 +28,7 @@ type realDecomposer struct {
 	result  *decomposer.DecomposeResult
 }
 
-func (d *realDecomposer) Decompose(ctx context.Context) (*cmdinternal.DecomposeResultInfo, error) {
+func (d *realDecomposer) Decompose(ctx context.Context) (*bootstrap.DecomposeResultInfo, error) {
 	// Create Claude logs directory
 	claudeLogsDir := filepath.Join(d.workDir, ".ralph", "logs", "claude")
 	if err := os.MkdirAll(claudeLogsDir, 0755); err != nil {
@@ -87,7 +87,7 @@ func (d *realDecomposer) Decompose(ctx context.Context) (*cmdinternal.DecomposeR
 	_, _ = fmt.Fprintf(d.output, "  Model: %s\n", result.Model)
 	_, _ = fmt.Fprintf(d.output, "  Cost: $%.4f\n\n", result.TotalCostUSD)
 
-	return &cmdinternal.DecomposeResultInfo{
+	return &bootstrap.DecomposeResultInfo{
 		TaskCount: taskCount,
 		YAMLPath:  outputPath,
 	}, nil
@@ -101,7 +101,7 @@ type realImporter struct {
 	output   io.Writer
 }
 
-func (i *realImporter) Import() (*cmdinternal.ImportResultInfo, error) {
+func (i *realImporter) Import() (*bootstrap.ImportResultInfo, error) {
 	_, _ = fmt.Fprintf(i.output, "Importing tasks into store...\n")
 
 	// Create task store
@@ -140,7 +140,7 @@ func (i *realImporter) Import() (*cmdinternal.ImportResultInfo, error) {
 
 	_, _ = fmt.Fprintln(i.output)
 
-	return &cmdinternal.ImportResultInfo{
+	return &bootstrap.ImportResultInfo{
 		TaskCount: result.Imported,
 	}, nil
 }
@@ -219,7 +219,7 @@ func (r *realRunner) Run(ctx context.Context) error {
 }
 
 // runBootstrapFromPRD runs the full PRD bootstrap pipeline.
-func runBootstrapFromPRD(cmd *cobra.Command, prdPath string, opts *cmdinternal.BootstrapOptions) error {
+func runBootstrapFromPRD(cmd *cobra.Command, prdPath string, opts *bootstrap.Options) error {
 	// Get working directory
 	workDir, err := os.Getwd()
 	if err != nil {
@@ -282,7 +282,7 @@ func runBootstrapFromPRD(cmd *cobra.Command, prdPath string, opts *cmdinternal.B
 	}
 
 	// Create and execute pipeline
-	pipeline := cmdinternal.NewPRDPipeline(
+	pipeline := bootstrap.NewPRDPipeline(
 		decomposerAdapter,
 		importerAdapter,
 		initializerAdapter,

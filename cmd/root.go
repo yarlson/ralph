@@ -7,8 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cmdinternal "github.com/yarlson/ralph/cmd/internal"
+	"github.com/yarlson/ralph/internal/bootstrap"
 	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/detect"
 	"github.com/yarlson/ralph/internal/state"
 )
 
@@ -100,11 +101,11 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Detect file type using bootstrap.DetectFileType
-	fileType := cmdinternal.DetectFileType(string(content))
+	// Detect file type using detect.DetectFileType
+	fileType := detect.DetectFileType(string(content))
 
 	switch fileType {
-	case cmdinternal.FileTypePRD:
+	case detect.FileTypePRD:
 		if rootDryRun {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Would decompose PRD file: %s\n", filePath)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Detected file type: prd\n")
@@ -123,7 +124,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		// Run full PRD bootstrap pipeline: decompose → import → init → run
-		opts := &cmdinternal.BootstrapOptions{
+		opts := &bootstrap.Options{
 			Once:          rootOnce,
 			MaxIterations: rootMaxIterations,
 			Parent:        rootParent,
@@ -131,7 +132,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		}
 		return runBootstrapFromPRD(cmd, filePath, opts)
 
-	case cmdinternal.FileTypeTasks:
+	case detect.FileTypeTasks:
 		if rootDryRun {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Would import task file: %s\n", filePath)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[dry-run] Detected file type: tasks\n")
@@ -150,7 +151,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		// Run YAML bootstrap pipeline: import → init → run (no decompose)
-		opts := &cmdinternal.BootstrapOptions{
+		opts := &bootstrap.Options{
 			Once:          rootOnce,
 			MaxIterations: rootMaxIterations,
 			Parent:        rootParent,
