@@ -154,6 +154,9 @@ func buildArgs(req ClaudeRequest, baseArgs []string) []string {
 	// Always use stream-json output format for structured parsing
 	args = append(args, "--output-format=stream-json")
 
+	// Skip permission prompts for autonomous execution
+	args = append(args, "--dangerously-skip-permissions")
+
 	// Add system prompt if specified
 	if req.SystemPrompt != "" {
 		args = append(args, "--system-prompt", req.SystemPrompt)
