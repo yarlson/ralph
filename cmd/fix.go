@@ -73,7 +73,78 @@ func runFix(cmd *cobra.Command, retryID, skipID, undoID, feedback, reason string
 		return runFixRetry(cmd, retryID, feedback)
 	}
 
-	// TODO: Implement other fix command logic (skip, undo)
+	// Handle --skip flag
+	if skipID != "" {
+		return runFixSkip(cmd, skipID, reason)
+	}
+
+	// TODO: Implement other fix command logic (undo)
+	return nil
+}
+
+// runFixSkip marks a task as skipped.
+func runFixSkip(cmd *cobra.Command, taskID, reason string) error {
+	// Get working directory
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Load configuration
+	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Open task store
+	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	store, err := taskstore.NewLocalStore(tasksPath)
+	if err != nil {
+		return fmt.Errorf("failed to open task store: %w", err)
+	}
+
+	// Get the task
+	task, err := store.Get(taskID)
+	if err != nil {
+		var notFoundErr *taskstore.NotFoundError
+		if errors.As(err, &notFoundErr) {
+			return fmt.Errorf("task %q not found", taskID)
+		}
+		return fmt.Errorf("failed to get task: %w", err)
+	}
+
+	// Validate task state - can only skip open, failed, or blocked tasks
+	switch task.Status {
+	case taskstore.StatusOpen, taskstore.StatusFailed, taskstore.StatusBlocked:
+		// OK to skip
+	case taskstore.StatusSkipped:
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Task %q is already skipped\n", taskID)
+		return nil
+	case taskstore.StatusCompleted:
+		return errors.New("Cannot skip completed task")
+	default:
+		return fmt.Errorf("cannot skip task %q: task status is %q (must be open, failed, or blocked)", taskID, task.Status)
+	}
+
+	// Update task status to skipped
+	if err := store.UpdateStatus(taskID, taskstore.StatusSkipped); err != nil {
+		return fmt.Errorf("failed to update task status: %w", err)
+	}
+
+	// Save reason if provided
+	if reason != "" {
+		if err := state.EnsureRalphDir(workDir); err != nil {
+			return fmt.Errorf("failed to ensure .ralph directory: %w", err)
+		}
+
+		reasonFile := filepath.Join(state.StateDirPath(workDir), fmt.Sprintf("skip-reason-%s.txt", taskID))
+		if err := os.WriteFile(reasonFile, []byte(reason), 0644); err != nil {
+			return fmt.Errorf("failed to write reason file: %w", err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skip reason saved for task %q\n", taskID)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Task %q marked as skipped\n", taskID)
 	return nil
 }
 
