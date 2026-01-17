@@ -3,10 +3,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +19,32 @@ import (
 	"github.com/yarlson/ralph/internal/state"
 	"github.com/yarlson/ralph/internal/taskstore"
 )
+
+// Test helpers for forcing TTY mode in tests
+var (
+	forceTTYMu    sync.Mutex
+	forceTTYValue *bool
+)
+
+// SetTTYForTesting allows tests to force TTY detection to a specific value.
+// Pass true to simulate TTY mode, false to simulate non-TTY mode.
+// The effect is reset to nil (normal behavior) when the test completes.
+func SetTTYForTesting(value bool) {
+	forceTTYMu.Lock()
+	defer forceTTYMu.Unlock()
+	forceTTYValue = &value
+}
+
+// isTTYForFix returns true if we should behave as if we're in a TTY.
+// This checks the forced value first (for testing), then falls back to real detection.
+func isTTYForFix() bool {
+	forceTTYMu.Lock()
+	defer forceTTYMu.Unlock()
+	if forceTTYValue != nil {
+		return *forceTTYValue
+	}
+	return cmdinternal.IsInteractive(os.Stdin.Fd())
+}
 
 func newFixCmd() *cobra.Command {
 	var retryID string
@@ -65,9 +93,11 @@ func runFix(cmd *cobra.Command, retryID, skipID, undoID, feedback, reason string
 	// If no action flags, check if we're in a TTY
 	if !hasActionFlag {
 		// Detect non-TTY by checking stdin
-		if !cmdinternal.IsInteractive(os.Stdin.Fd()) {
+		if !isTTYForFix() {
 			return runFixNonTTYError(cmd)
 		}
+		// Launch interactive mode for TTY with no flags
+		return runFixInteractive(cmd, force)
 	}
 
 	// Handle --retry flag
@@ -502,3 +532,235 @@ func gitResetHardFix(workDir, commit string) error {
 	cmd.Dir = workDir
 	return cmd.Run()
 }
+
+// runFixInteractive runs the interactive fix mode.
+// It shows issues, recent iterations, and prompts for commands.
+func runFixInteractive(cmd *cobra.Command, force bool) error {
+	// Get working directory
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Load configuration
+	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Open task store
+	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	store, err := taskstore.NewLocalStore(tasksPath)
+	if err != nil {
+		return fmt.Errorf("failed to open task store: %w", err)
+	}
+
+	// Get all tasks
+	tasks, err := store.List()
+	if err != nil {
+		return fmt.Errorf("failed to list tasks: %w", err)
+	}
+
+	// Load iteration records
+	logsDir := state.LogsDirPath(workDir)
+	iterations, err := loop.LoadAllIterationRecords(logsDir)
+	if err != nil {
+		// Don't fail if logs directory doesn't exist
+		iterations = nil
+	}
+
+	// Build issues list (failed and blocked tasks)
+	var issues []cmdinternal.FixIssue
+	for _, task := range tasks {
+		if task.Status == taskstore.StatusFailed || task.Status == taskstore.StatusBlocked {
+			// Count attempts from iteration records
+			attempts := countTaskAttempts(iterations, task.ID)
+			issues = append(issues, cmdinternal.FixIssue{
+				TaskID:   task.ID,
+				Title:    task.Title,
+				Status:   string(task.Status),
+				Attempts: attempts,
+			})
+		}
+	}
+
+	// Sort iterations by end time (most recent first) and limit to 10
+	sort.Slice(iterations, func(i, j int) bool {
+		return iterations[i].EndTime.After(iterations[j].EndTime)
+	})
+	const maxIterations = 10
+	if len(iterations) > maxIterations {
+		iterations = iterations[:maxIterations]
+	}
+
+	// Build iterations list
+	var fixIterations []cmdinternal.FixIteration
+	for _, iter := range iterations {
+		fixIterations = append(fixIterations, cmdinternal.FixIteration{
+			IterationID: iter.IterationID,
+			TaskID:      iter.TaskID,
+			Outcome:     string(iter.Outcome),
+		})
+	}
+
+	// Create action handler
+	handler := func(action *cmdinternal.FixAction) error {
+		return executeFixAction(cmd, workDir, cfg, store, action, force)
+	}
+
+	// Create editor function for retry with feedback
+	editorFn := func(taskID string) (string, error) {
+		return openEditorForFeedback(taskID)
+	}
+
+	// Run interactive mode
+	return cmdinternal.FixInteractiveModeWithEditor(
+		cmd.OutOrStdout(),
+		cmd.InOrStdin(),
+		issues,
+		fixIterations,
+		handler,
+		editorFn,
+	)
+}
+
+// countTaskAttempts counts the number of attempts for a task from iteration records.
+func countTaskAttempts(iterations []*loop.IterationRecord, taskID string) int {
+	count := 0
+	for _, iter := range iterations {
+		if iter.TaskID == taskID {
+			count++
+		}
+	}
+	return count
+}
+
+// executeFixAction executes a fix action from interactive mode.
+func executeFixAction(cmd *cobra.Command, workDir string, cfg *config.Config, store *taskstore.LocalStore, action *cmdinternal.FixAction, force bool) error {
+	switch action.Type {
+	case cmdinternal.FixActionRetry:
+		return runFixRetry(cmd, action.TargetID, action.Feedback)
+	case cmdinternal.FixActionSkip:
+		return runFixSkip(cmd, action.TargetID, "")
+	case cmdinternal.FixActionUndo:
+		return runFixUndo(cmd, action.TargetID, force)
+	default:
+		return fmt.Errorf("unknown action type: %s", action.Type)
+	}
+}
+
+// openEditorForFeedback opens the user's editor for entering feedback.
+// It creates a temporary file with instructions and returns the content.
+func openEditorForFeedback(taskID string) (string, error) {
+	// Get editor from environment
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		// Try common editors
+		for _, e := range []string{"vim", "vi", "nano", "notepad"} {
+			if _, err := exec.LookPath(e); err == nil {
+				editor = e
+				break
+			}
+		}
+	}
+	if editor == "" {
+		return "", fmt.Errorf("no editor found. Set EDITOR or VISUAL environment variable")
+	}
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", fmt.Sprintf("ralph-feedback-%s-*.txt", taskID))
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	// Write instructions to file
+	instructions := fmt.Sprintf(`# Enter feedback for task %s
+# Lines starting with # will be ignored.
+# Save and close the editor to continue.
+
+`, taskID)
+	if _, err := tmpFile.WriteString(instructions); err != nil {
+		_ = tmpFile.Close()
+		return "", fmt.Errorf("failed to write instructions: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	// Open editor
+	editorCmd := exec.Command(editor, tmpPath)
+	editorCmd.Stdin = os.Stdin
+	editorCmd.Stdout = os.Stdout
+	editorCmd.Stderr = os.Stderr
+	if err := editorCmd.Run(); err != nil {
+		return "", fmt.Errorf("editor failed: %w", err)
+	}
+
+	// Read feedback from file
+	content, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read feedback: %w", err)
+	}
+
+	// Parse content, removing comment lines
+	return parseEditorContent(string(content)), nil
+}
+
+// parseEditorContent removes comment lines and trims whitespace from editor content.
+func parseEditorContent(content string) string {
+	var result []byte
+	inComment := false
+	lineStart := true
+
+	for _, ch := range content {
+		if lineStart && ch == '#' {
+			inComment = true
+		}
+		if ch == '\n' {
+			if !inComment {
+				result = append(result, '\n')
+			}
+			inComment = false
+			lineStart = true
+		} else {
+			lineStart = false
+			if !inComment {
+				result = append(result, byte(ch))
+			}
+		}
+	}
+
+	// Trim leading and trailing whitespace
+	return trimWhitespace(string(result))
+}
+
+// trimWhitespace removes leading and trailing whitespace from a string.
+func trimWhitespace(s string) string {
+	start := 0
+	end := len(s)
+
+	// Find first non-whitespace
+	for start < end && isWhitespace(s[start]) {
+		start++
+	}
+
+	// Find last non-whitespace
+	for end > start && isWhitespace(s[end-1]) {
+		end--
+	}
+
+	return s[start:end]
+}
+
+// isWhitespace returns true if the byte is whitespace.
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+// Ensure io is used (for future interface compatibility)
+var _ io.Writer = os.Stdout

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1661,4 +1662,306 @@ func getGitCommit(t *testing.T, dir string) string {
 	output, err := cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(output))
+}
+
+// Interactive mode tests - Note: These use a simulated TTY via SetTTYForTesting
+
+func TestFixCommand_InteractiveMode_ShowsIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Create an iteration record
+	record := &loop.IterationRecord{
+		IterationID: "abc12345",
+		TaskID:      "task-1",
+		StartTime:   now.Add(-10 * time.Minute),
+		EndTime:     now.Add(-5 * time.Minute),
+		Outcome:     loop.OutcomeFailed,
+	}
+	_, err = loop.SaveRecord(logsDir, record)
+	require.NoError(t, err)
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Force TTY mode for testing
+	SetTTYForTesting(true)
+	defer SetTTYForTesting(false)
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide 'q' to quit interactive mode
+	cmd.SetIn(bytes.NewReader([]byte("q\n")))
+	cmd.SetArgs([]string{"fix"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	output := out.String()
+	// Should show issues
+	assert.Contains(t, output, "task-failed-1")
+	assert.Contains(t, output, "A Failed Task")
+	// Should show iterations
+	assert.Contains(t, output, "abc12345")
+	// Should show commands help
+	assert.Contains(t, output, "r <id>")
+	assert.Contains(t, output, "s <id>")
+	assert.Contains(t, output, "u <id>")
+	assert.Contains(t, output, "rf <id>")
+	assert.Contains(t, output, "q")
+}
+
+func TestFixCommand_InteractiveMode_RetryCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Force TTY mode for testing
+	SetTTYForTesting(true)
+	defer SetTTYForTesting(false)
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide 'r task-failed-1' then 'q' to quit
+	cmd.SetIn(bytes.NewReader([]byte("r task-failed-1\nq\n")))
+	cmd.SetArgs([]string{"fix"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was reset
+	updated, err := store.Get("task-failed-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusOpen, updated.Status)
+
+	// Verify output shows retry success
+	output := out.String()
+	assert.Contains(t, output, "Retry initiated")
+}
+
+func TestFixCommand_InteractiveMode_SkipCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Force TTY mode for testing
+	SetTTYForTesting(true)
+	defer SetTTYForTesting(false)
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide 's task-failed-1' then 'q' to quit
+	cmd.SetIn(bytes.NewReader([]byte("s task-failed-1\nq\n")))
+	cmd.SetArgs([]string{"fix"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify task status was set to skipped
+	updated, err := store.Get("task-failed-1")
+	require.NoError(t, err)
+	assert.Equal(t, taskstore.StatusSkipped, updated.Status)
+
+	// Verify output shows skip success
+	output := out.String()
+	assert.Contains(t, output, "skipped")
+}
+
+func TestFixCommand_InteractiveMode_QuitCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Force TTY mode for testing
+	SetTTYForTesting(true)
+	defer SetTTYForTesting(false)
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide 'q' to quit immediately
+	cmd.SetIn(bytes.NewReader([]byte("q\n")))
+	cmd.SetArgs([]string{"fix"})
+
+	err = cmd.Execute()
+	require.NoError(t, err) // Should exit cleanly
+}
+
+func TestFixCommand_InteractiveMode_ShowsAttemptCounts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .ralph structure
+	tasksDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	logsDir := filepath.Join(tmpDir, ".ralph", "logs")
+	require.NoError(t, os.MkdirAll(tasksDir, 0755))
+	require.NoError(t, os.MkdirAll(logsDir, 0755))
+
+	// Create a failed task
+	store, err := taskstore.NewLocalStore(tasksDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:        "task-failed-1",
+		Title:     "A Failed Task",
+		Status:    taskstore.StatusFailed,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, store.Save(task))
+
+	// Create multiple iteration records for the same task
+	for i := 0; i < 3; i++ {
+		record := &loop.IterationRecord{
+			IterationID: fmt.Sprintf("iter%d", i),
+			TaskID:      "task-failed-1",
+			StartTime:   now.Add(-time.Duration(10+i) * time.Minute),
+			EndTime:     now.Add(-time.Duration(5+i) * time.Minute),
+			Outcome:     loop.OutcomeFailed,
+		}
+		_, err = loop.SaveRecord(logsDir, record)
+		require.NoError(t, err)
+	}
+
+	// Write ralph.yaml
+	configContent := `tasks:
+  path: ".ralph/tasks"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte(configContent), 0644))
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Force TTY mode for testing
+	SetTTYForTesting(true)
+	defer SetTTYForTesting(false)
+
+	cmd := NewRootCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	// Provide 'q' to quit interactive mode
+	cmd.SetIn(bytes.NewReader([]byte("q\n")))
+	cmd.SetArgs([]string{"fix"})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	output := out.String()
+	// Should show attempt count of 3
+	assert.Contains(t, output, "attempts: 3")
 }
