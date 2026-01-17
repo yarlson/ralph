@@ -165,3 +165,55 @@ func BootstrapFromPRD(ctx context.Context, prdPath string, out io.Writer, opts *
 	// This function signature is here to define the contract
 	return fmt.Errorf("PRD file not found: %s", prdPath)
 }
+
+// YAMLPipeline orchestrates the import→init→run pipeline for .yaml/.yml files.
+// It skips the decomposition step entirely since tasks are already defined.
+type YAMLPipeline struct {
+	importer    PipelineImporter
+	initializer PipelineInitializer
+	runner      PipelineRunner
+	output      io.Writer
+}
+
+// NewYAMLPipeline creates a new YAML pipeline with the given dependencies.
+func NewYAMLPipeline(i PipelineImporter, init PipelineInitializer, r PipelineRunner, out io.Writer) *YAMLPipeline {
+	return &YAMLPipeline{
+		importer:    i,
+		initializer: init,
+		runner:      r,
+		output:      out,
+	}
+}
+
+// Execute runs the YAML bootstrap pipeline (import→init→run).
+func (p *YAMLPipeline) Execute(ctx context.Context, yamlPath string) error {
+	// Show initializing message
+	_, _ = fmt.Fprintf(p.output, "Initializing from YAML: %s\n", yamlPath)
+
+	// Step 1: Import
+	result, err := p.importer.Import()
+	if err != nil {
+		return err
+	}
+
+	// Show task count summary
+	_, _ = fmt.Fprintf(p.output, "Imported %d tasks\n", result.TaskCount)
+
+	// Step 2: Init
+	err = p.initializer.Init()
+	if err != nil {
+		return err
+	}
+
+	// Step 3: Run
+	return p.runner.Run(ctx)
+}
+
+// BootstrapFromYAML orchestrates the import→init→run pipeline for .yaml/.yml files.
+// It takes a YAML task file path and runs the bootstrap sequence without decomposition.
+func BootstrapFromYAML(ctx context.Context, yamlPath string, out io.Writer, opts *BootstrapOptions) error {
+	// This is a placeholder that will be called from root.go
+	// The actual implementation with real dependencies will be in root.go
+	// This function signature is here to define the contract
+	return fmt.Errorf("YAML file not found: %s", yamlPath)
+}
