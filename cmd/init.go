@@ -25,6 +25,7 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize ralph for a feature",
 		Long:  "Initialize ralph by setting the parent task ID and validating the task graph.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecated(cmd.ErrOrStderr(), "init")
 			return runInit(cmd, parentID, searchTerm)
 		},
 	}

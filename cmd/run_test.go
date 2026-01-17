@@ -574,3 +574,55 @@ func TestRunCmd_ExistingParentTaskID_SkipsAutoInit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "root-1", string(data))
 }
+
+func TestRunCmd_ShowsDeprecationWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(oldWd) }()
+	require.NoError(t, os.Chdir(tmpDir))
+
+	// Create .ralph directory structure
+	ralphDir := filepath.Join(tmpDir, ".ralph", "tasks")
+	require.NoError(t, os.MkdirAll(ralphDir, 0755))
+
+	cmd := newRunCmd()
+	cmd.SetArgs([]string{})
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+
+	_ = cmd.Execute() // Ignore error, we just want to check stderr
+
+	// Check that deprecation warning was written to stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+	assert.Contains(t, errBuf.String(), "Use ralph instead")
+}
+
+func TestRunCmd_DeprecationWarningDoesNotPreventExecution(t *testing.T) {
+	tmpDir, _ := setupTestDirWithTasks(t, 1)
+
+	rootCmd := NewRootCmd()
+	rootCmd.SetArgs([]string{"run", "--once"})
+
+	var outBuf, errBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&errBuf)
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Warning should be on stderr
+	assert.Contains(t, errBuf.String(), "Deprecated:")
+
+	// Success output should be on stdout (includes auto-init message and run result)
+	output := outBuf.String()
+	assert.Contains(t, output, "Starting ralph loop for parent task")
+
+	// Verify parent task ID was set
+	parentIDFile := filepath.Join(tmpDir, ".ralph", "parent-task-id")
+	data, err := os.ReadFile(parentIDFile)
+	require.NoError(t, err)
+	assert.Equal(t, "root-1", string(data))
+}
