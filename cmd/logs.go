@@ -21,6 +21,7 @@ func newLogsCmd() *cobra.Command {
 		Short: "Show iteration logs",
 		Long:  "Display iteration logs. Use --iteration to show a specific iteration, or list all available iterations.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecated(cmd.ErrOrStderr(), "logs")
 			return runLogs(cmd, iterationID)
 		},
 	}

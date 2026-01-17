@@ -22,6 +22,7 @@ func newReportCmd() *cobra.Command {
 		Short: "Generate feature report",
 		Long:  "Generate and display an end-of-feature summary report with commits, completed tasks, and blocked tasks.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecated(cmd.ErrOrStderr(), "report")
 			return runReport(cmd, outputFile)
 		},
 	}
