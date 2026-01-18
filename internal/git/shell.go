@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 )
@@ -34,9 +35,10 @@ func (m *ShellManager) runGit(ctx context.Context, args ...string) (string, erro
 
 	err := cmd.Run()
 	if err != nil {
-		// Check if this is a "not a git repository" error
 		stderrStr := stderr.String()
 		stderrLower := strings.ToLower(stderrStr)
+
+		// Check if this is a "not a git repository" error
 		if strings.Contains(stderrLower, "not a git repository") {
 			return "", &GitError{
 				Command: "git " + strings.Join(args, " "),
@@ -44,6 +46,17 @@ func (m *ShellManager) runGit(ctx context.Context, args ...string) (string, erro
 				Err:     ErrNotAGitRepo,
 			}
 		}
+
+		// Check if this is an empty repo (no commits) error
+		if strings.Contains(stderrLower, "ambiguous argument 'head'") ||
+			strings.Contains(stderrLower, "unknown revision") {
+			return "", &GitError{
+				Command: "git " + strings.Join(args, " "),
+				Output:  stderrStr,
+				Err:     ErrNoCommits,
+			}
+		}
+
 		return "", &GitError{
 			Command: "git " + strings.Join(args, " "),
 			Output:  stderrStr,
@@ -54,9 +67,32 @@ func (m *ShellManager) runGit(ctx context.Context, args ...string) (string, erro
 	return strings.TrimSpace(stdout.String()), nil
 }
 
+// Init initializes a new git repository in the working directory.
+// Returns nil if already a git repository.
+func (m *ShellManager) Init(ctx context.Context) error {
+	// Check if already a git repository
+	_, err := m.runGit(ctx, "rev-parse", "--git-dir")
+	if err == nil {
+		return nil // Already initialized
+	}
+	if !errors.Is(err, ErrNotAGitRepo) {
+		return err // Unexpected error
+	}
+
+	// Initialize new repo
+	_, err = m.runGit(ctx, "init")
+	return err
+}
+
 // GetCurrentBranch returns the name of the current branch.
 func (m *ShellManager) GetCurrentBranch(ctx context.Context) (string, error) {
 	return m.runGit(ctx, "rev-parse", "--abbrev-ref", "HEAD")
+}
+
+// getCurrentBranchSymbolic returns the current branch using symbolic-ref.
+// This works even in empty repos with no commits.
+func (m *ShellManager) getCurrentBranchSymbolic(ctx context.Context) (string, error) {
+	return m.runGit(ctx, "symbolic-ref", "--short", "HEAD")
 }
 
 // GetCurrentCommit returns the current HEAD commit hash.
@@ -149,12 +185,27 @@ func (m *ShellManager) Commit(ctx context.Context, message string) (string, erro
 // EnsureBranch ensures a branch exists and switches to it.
 // The branch name is prefixed with the configured branch prefix.
 // If the branch doesn't exist, it creates it. If it already exists, it switches to it.
+// Handles empty repos (no commits) gracefully.
 func (m *ShellManager) EnsureBranch(ctx context.Context, branchName string) error {
 	fullBranchName := m.branchPrefix + branchName
 
 	// Check if we're already on this branch
 	currentBranch, err := m.GetCurrentBranch(ctx)
 	if err != nil {
+		// If repo has no commits, fall back to symbolic-ref which works in empty repos
+		if errors.Is(err, ErrNoCommits) {
+			currentBranch, err = m.getCurrentBranchSymbolic(ctx)
+			if err != nil {
+				return err
+			}
+			// In an empty repo, if we're on the target branch, we're done
+			if currentBranch == fullBranchName {
+				return nil
+			}
+			// In an empty repo, create the new branch (this will be orphan)
+			_, err = m.runGit(ctx, "checkout", "-b", fullBranchName)
+			return err
+		}
 		return err
 	}
 	if currentBranch == fullBranchName {

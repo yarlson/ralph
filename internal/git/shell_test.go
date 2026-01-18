@@ -406,3 +406,54 @@ func TestShellManager_EmptyBranchPrefix(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "feature-test", branch) // No prefix
 }
+
+func TestShellManager_EnsureBranch_EmptyRepo(t *testing.T) {
+	// Test that EnsureBranch works in a repo with no commits (greenfield project)
+	dir := setupTestRepo(t)
+	mgr := NewShellManager(dir, "ralph/")
+
+	// No commits yet - this should not fail
+	err := mgr.EnsureBranch(context.Background(), "feature-test")
+	require.NoError(t, err)
+
+	// After creating a file and committing, we should be able to verify the branch
+	commitTestFile(t, dir, "README.md", "# Test", "initial commit")
+
+	branch, err := mgr.GetCurrentBranch(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "ralph/feature-test", branch)
+}
+
+func TestShellManager_EnsureBranch_EmptyRepoAlreadyOnBranch(t *testing.T) {
+	// Test when already on the target branch in an empty repo
+	dir := setupTestRepo(t)
+	mgr := NewShellManager(dir, "")
+
+	// In an empty repo, we're typically on "main" branch
+	// EnsureBranch with "main" should succeed (already on it)
+	err := mgr.EnsureBranch(context.Background(), "main")
+	require.NoError(t, err)
+}
+
+func TestShellManager_Init_NewDirectory(t *testing.T) {
+	// Test initializing a new git repo in a non-git directory
+	dir := t.TempDir()
+	mgr := NewShellManager(dir, "ralph/")
+
+	err := mgr.Init(context.Background())
+	require.NoError(t, err)
+
+	// Verify it's now a git repo
+	_, err = mgr.getCurrentBranchSymbolic(context.Background())
+	require.NoError(t, err)
+}
+
+func TestShellManager_Init_AlreadyInitialized(t *testing.T) {
+	// Test that Init is idempotent (doesn't fail if already a repo)
+	dir := setupTestRepo(t)
+	mgr := NewShellManager(dir, "ralph/")
+
+	// Should not fail when already initialized
+	err := mgr.Init(context.Background())
+	require.NoError(t, err)
+}

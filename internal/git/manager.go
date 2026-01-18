@@ -12,6 +12,9 @@ var (
 	// ErrNotAGitRepo indicates the directory is not a git repository.
 	ErrNotAGitRepo = errors.New("not a git repository")
 
+	// ErrNoCommits indicates the repository has no commits yet (empty/new repo).
+	ErrNoCommits = errors.New("no commits in repository")
+
 	// ErrNoChanges indicates there are no changes to commit.
 	ErrNoChanges = errors.New("no changes to commit")
 
@@ -48,6 +51,10 @@ func (e *GitError) Unwrap() error {
 // Manager defines the interface for Git operations.
 // It provides methods for branch management, commit operations, and diff tracking.
 type Manager interface {
+	// Init initializes a new git repository in the working directory.
+	// Returns nil if already a git repository.
+	Init(ctx context.Context) error
+
 	// EnsureBranch ensures a branch exists and switches to it.
 	// If the branch doesn't exist, it creates it.
 	// If the branch already exists, it switches to it.

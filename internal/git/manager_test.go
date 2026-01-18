@@ -21,6 +21,10 @@ type mockManager struct {
 	err           error
 }
 
+func (m *mockManager) Init(_ context.Context) error {
+	return m.err
+}
+
 func (m *mockManager) EnsureBranch(_ context.Context, _ string) error {
 	return m.err
 }

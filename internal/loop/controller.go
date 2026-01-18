@@ -2,7 +2,9 @@ package loop
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,14 +94,16 @@ type Summary struct {
 
 // ControllerDeps contains the dependencies for the Controller.
 type ControllerDeps struct {
-	TaskStore    taskstore.Store
-	Claude       claude.Runner
-	Verifier     verifier.Verifier
-	Git          git.Manager
-	LogsDir      string
-	ProgressDir  string
-	ProgressFile *memory.ProgressFile
-	WorkDir      string
+	TaskStore      taskstore.Store
+	Claude         claude.Runner
+	Verifier       verifier.Verifier
+	Git            git.Manager
+	LogsDir        string
+	ProgressDir    string
+	ProgressFile   *memory.ProgressFile
+	WorkDir        string
+	ProgressWriter io.Writer // for status output (nil = disabled)
+	StreamWriter   io.Writer // for Claude streaming (nil = disabled)
 }
 
 // Controller orchestrates the main iteration loop.
@@ -112,6 +116,8 @@ type Controller struct {
 	progressDir  string
 	progressFile *memory.ProgressFile
 	workDir      string
+	progressWriter io.Writer
+	streamWriter   io.Writer
 
 	budget *BudgetTracker
 	gutter *GutterDetector
@@ -143,12 +149,53 @@ func NewController(deps ControllerDeps) *Controller {
 		progressDir:            deps.ProgressDir,
 		progressFile:           deps.ProgressFile,
 		workDir:                deps.WorkDir,
+		progressWriter:         deps.ProgressWriter,
+		streamWriter:           deps.StreamWriter,
 		budget:                 NewBudgetTracker(DefaultBudgetLimits()),
 		gutter:                 NewGutterDetector(DefaultGutterConfig()),
 		maxRetries:             2, // default
 		maxVerificationRetries: 2, // default
 		taskAttempts:           make(map[string]int),
 	}
+}
+
+func (c *Controller) writeProgress(format string, args ...interface{}) {
+	if c.progressWriter == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(c.progressWriter, format, args...)
+}
+
+func (c *Controller) iterationSummary(record *IterationRecord) {
+	if c.progressWriter == nil || record == nil || record.Outcome == "" {
+		return
+	}
+
+	duration := record.Duration().Round(time.Second)
+	if duration == 0 {
+		duration = record.Duration()
+	}
+
+	fileCount := len(record.FilesChanged)
+	fileSummary := fmt.Sprintf("%d files changed", fileCount)
+	if fileCount == 1 {
+		fileSummary = "1 file changed"
+	}
+
+	if record.Outcome == OutcomeSuccess {
+		c.writeProgress("✓ Completed in %s ($%.4f) - %s\n\n", duration, record.ClaudeInvocation.TotalCostUSD, fileSummary)
+		return
+	}
+
+	reason := strings.TrimSpace(record.Feedback)
+	if reason == "" {
+		reason = "Unknown failure"
+	}
+	if newline := strings.Index(reason, "\n"); newline >= 0 {
+		reason = strings.TrimSpace(reason[:newline])
+	}
+
+	c.writeProgress("✗ Failed in %s ($%.4f) - %s: %s\n\n", duration, record.ClaudeInvocation.TotalCostUSD, fileSummary, reason)
 }
 
 // SetBudgetLimits sets the budget limits for the controller.
@@ -247,6 +294,7 @@ func (c *Controller) checkPaused() bool {
 
 // ensureFeatureBranch ensures the feature branch exists and is checked out.
 // It uses the branch override if set, otherwise generates a branch name from the parent task title.
+// If the directory is not a git repository, it initializes one automatically.
 func (c *Controller) ensureFeatureBranch(ctx context.Context, parentTaskID string) error {
 	var branchName string
 
@@ -264,6 +312,17 @@ func (c *Controller) ensureFeatureBranch(ctx context.Context, parentTaskID strin
 
 	// Call git manager to ensure branch
 	if err := c.gitManager.EnsureBranch(ctx, branchName); err != nil {
+		// If not a git repo, auto-initialize and retry
+		if errors.Is(err, git.ErrNotAGitRepo) {
+			if initErr := c.gitManager.Init(ctx); initErr != nil {
+				return fmt.Errorf("failed to initialize git repository: %w", initErr)
+			}
+			// Retry after init
+			if retryErr := c.gitManager.EnsureBranch(ctx, branchName); retryErr != nil {
+				return fmt.Errorf("failed to ensure branch after git init: %w", retryErr)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to ensure branch: %w", err)
 	}
 
@@ -483,6 +542,14 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	c.taskAttempts[task.ID]++
 	record.AttemptNumber = c.taskAttempts[task.ID]
 
+	attemptSuffix := ""
+	if record.AttemptNumber > 1 {
+		attemptSuffix = fmt.Sprintf(" (attempt %d)", record.AttemptNumber)
+	}
+
+	c.writeProgress("▶ Task: %s%s\n", task.Title, attemptSuffix)
+	defer c.iterationSummary(record)
+
 	// Create context with per-iteration timeout if configured
 	iterationCtx := ctx
 	var cancel context.CancelFunc
@@ -528,6 +595,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		req.AllowedTools = c.allowedTools
 	}
 
+	c.writeProgress("  ⏳ Invoking Claude...\n")
 	resp, err := c.claudeRunner.Run(iterationCtx, req)
 	if err != nil {
 		// Check if error is due to timeout
@@ -601,7 +669,11 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 
 			// Convert to VerificationOutput
 			record.VerificationOutputs = []VerificationOutput{} // Reset for each attempt
+			passedCount := 0
 			for _, r := range results {
+				if r.Passed {
+					passedCount++
+				}
 				record.VerificationOutputs = append(record.VerificationOutputs, VerificationOutput{
 					Command:  r.Command,
 					Passed:   r.Passed,
@@ -609,17 +681,23 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 					Duration: r.Duration,
 				})
 			}
+			totalCount := len(results)
 
 			// Check if all passed
 			if record.AllPassed() {
+				c.writeProgress("  ✓ Verification: %d/%d passed\n", passedCount, totalCount)
 				verificationPassed = true
 				break
 			}
+
+			c.writeProgress("  ✗ Verification: %d/%d passed\n", passedCount, totalCount)
 
 			// If this was the last allowed attempt, fail
 			if verificationAttempt > c.maxVerificationRetries {
 				break
 			}
+
+			c.writeProgress("  ↻ Retrying (attempt %d/%d)...\n", verificationAttempt+1, c.maxVerificationRetries+1)
 
 			// Build retry prompt with failure context
 			systemPrompt, userPrompt, err = c.buildRetryPromptForVerificationFailure(iterationCtx, task, results, verificationAttempt)
@@ -678,6 +756,8 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 			c.handleTaskFailure(task.ID)
 			return record
 		}
+	} else {
+		c.writeProgress("  ✓ Verification skipped (no commands)\n")
 	}
 
 	// Commit changes
@@ -698,6 +778,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 	}
 
 	record.ResultCommit = commitHash
+	c.writeProgress("  📝 Committed: %s\n", commitHash)
 
 	// Mark task completed and reset attempt counter
 	_ = c.taskStore.UpdateStatus(task.ID, taskstore.StatusCompleted)

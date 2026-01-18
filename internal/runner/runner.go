@@ -28,6 +28,7 @@ type Options struct {
 	Once          bool
 	MaxIterations int
 	Branch        string
+	Stream        bool // Stream Claude output to console
 }
 
 // Run executes the main iteration loop.
@@ -116,16 +117,23 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 	// Create git manager
 	gitManager := gitpkg.NewShellManager(workDir, cfg.Repo.BranchPrefix)
 
+	streamWriter := io.Writer(nil)
+	if opts.Stream {
+		streamWriter = stdout
+	}
+
 	// Build controller dependencies
 	deps := loop.ControllerDeps{
-		TaskStore:    store,
-		Claude:       claudeRunner,
-		Verifier:     ver,
-		Git:          gitManager,
-		LogsDir:      logsDir,
-		ProgressDir:  filepath.Dir(progressPath),
-		ProgressFile: progressFile,
-		WorkDir:      workDir,
+		TaskStore:      store,
+		Claude:         claudeRunner,
+		Verifier:       ver,
+		Git:            gitManager,
+		LogsDir:        logsDir,
+		ProgressDir:    filepath.Dir(progressPath),
+		ProgressFile:   progressFile,
+		WorkDir:        workDir,
+		ProgressWriter: stdout,
+		StreamWriter:   streamWriter,
 	}
 
 	// Create controller

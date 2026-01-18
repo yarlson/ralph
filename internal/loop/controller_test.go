@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -167,6 +168,10 @@ type mockGitManager struct {
 	commitMessage string
 	err           error
 	commitCalls   []string
+}
+
+func (m *mockGitManager) Init(ctx context.Context) error {
+	return nil
 }
 
 func (m *mockGitManager) EnsureBranch(ctx context.Context, branchName string) error {
@@ -810,6 +815,10 @@ type dynamicGitManager struct {
 	commitFn           func(ctx context.Context, message string) (string, error)
 }
 
+func (m *dynamicGitManager) Init(ctx context.Context) error {
+	return nil
+}
+
 func (m *dynamicGitManager) EnsureBranch(ctx context.Context, branchName string) error {
 	if m.ensureBranchFn != nil {
 		return m.ensureBranchFn(ctx, branchName)
@@ -988,6 +997,58 @@ func TestController_RunLoop_RecordsIterations(t *testing.T) {
 	assert.Len(t, record.FilesChanged, 2)
 	assert.Equal(t, "sess-123", record.ClaudeInvocation.SessionID)
 	assert.Equal(t, 0.05, record.ClaudeInvocation.TotalCostUSD)
+}
+
+func TestController_RunIteration_EmitsProgressOutput(t *testing.T) {
+	store := newMockTaskStore()
+	task := newTestTask("task1", "Test Task", taskstore.StatusOpen, nil)
+	task.Verify = [][]string{{"echo", "ok"}}
+	store.addTask(task)
+
+	claudeRunner := &mockClaudeRunner{
+		response: &claude.ClaudeResponse{
+			SessionID:    "sess-123",
+			FinalText:    "Done",
+			TotalCostUSD: 0.0123,
+		},
+	}
+
+	verifierMock := &mockVerifier{
+		results: []verifier.VerificationResult{
+			{Passed: true, Command: []string{"echo", "ok"}, Output: "ok"},
+		},
+	}
+
+	gitMock := &mockGitManager{
+		currentCommit: "abc123",
+		hasChanges:    true,
+		changedFiles:  []string{"file1.go"},
+		commitHash:    "def456",
+	}
+
+	var progress bytes.Buffer
+	deps := ControllerDeps{
+		TaskStore:      store,
+		Claude:         claudeRunner,
+		Verifier:       verifierMock,
+		Git:            gitMock,
+		LogsDir:        t.TempDir(),
+		ProgressWriter: &progress,
+	}
+
+	ctrl := NewController(deps)
+	record := ctrl.runIteration(context.Background(), task)
+
+	require.Equal(t, OutcomeSuccess, record.Outcome)
+
+	output := progress.String()
+	assert.Contains(t, output, "▶ Task: Test Task")
+	assert.Contains(t, output, "⏳ Invoking Claude")
+	assert.Contains(t, output, "✓ Verification")
+	assert.Contains(t, output, "📝 Committed: def456")
+	assert.Contains(t, output, "Completed in")
+	assert.Contains(t, output, "$0.0123")
+	assert.Contains(t, output, "1 file changed")
 }
 
 func TestBuildGraph_ForSelector(t *testing.T) {

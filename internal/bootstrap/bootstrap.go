@@ -25,6 +25,7 @@ type Options struct {
 	MaxIterations int
 	Parent        string
 	Branch        string
+	Stream        bool // Stream Claude output to console
 }
 
 // RunFromPRD runs the full pipeline: decompose → import → init → run.
@@ -53,6 +54,7 @@ func RunFromPRD(ctx context.Context, prdPath, workDir string, cfg *config.Config
 		Once:          opts.Once,
 		MaxIterations: opts.MaxIterations,
 		Branch:        opts.Branch,
+		Stream:        opts.Stream,
 	}
 	return runner.Run(ctx, workDir, cfg, parentTaskID, runOpts, stdout, stderr)
 }
@@ -77,6 +79,7 @@ func RunFromYAML(ctx context.Context, yamlPath, workDir string, cfg *config.Conf
 		Once:          opts.Once,
 		MaxIterations: opts.MaxIterations,
 		Branch:        opts.Branch,
+		Stream:        opts.Stream,
 	}
 	return runner.Run(ctx, workDir, cfg, parentTaskID, runOpts, stdout, stderr)
 }
