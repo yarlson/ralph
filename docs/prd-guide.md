@@ -9,22 +9,27 @@ This guide explains how to write effective PRDs (Product Requirements Documents)
 Ralph's task executor (Claude Code) runs autonomously—it cannot ask clarifying questions. Every decision must be made upfront in the PRD.
 
 **Bad:**
+
 > Add caching to improve performance.
 
 **Good:**
+
 > Add Redis-based caching for the `/api/users/:id` endpoint with a 5-minute TTL. Cache invalidation occurs on user update.
 
 ### 2. Reference Existing Code
 
 Unlike greenfield projects, features in existing codebases must integrate with current architecture. Always reference:
+
 - Existing files to modify
 - Patterns already in use
 - Conventions to follow
 
 **Bad:**
+
 > Create a new API endpoint for user preferences.
 
 **Good:**
+
 > Create `GET/PUT /api/users/:id/preferences` endpoints following the pattern in `internal/api/users.go`. Use the existing `UserRepository` for data access.
 
 ### 3. Specify File Paths
@@ -32,10 +37,13 @@ Unlike greenfield projects, features in existing codebases must integrate with c
 Ralph creates tasks that target specific files. The more explicit you are, the better the task decomposition.
 
 **Bad:**
+
 > Add validation to user inputs.
 
 **Good:**
+
 > Add validation to `internal/api/handlers/user.go`:
+>
 > - Email format validation using existing `pkg/validation/email.go`
 > - Password strength check (min 8 chars, 1 uppercase, 1 number)
 > - Return 400 Bad Request with field-specific errors
@@ -58,31 +66,41 @@ Each PRD should represent a cohesive feature. Avoid bundling unrelated changes.
 # Feature Name - PRD
 
 ## Overview
+
 [1-2 paragraphs: What is this feature? Why are we building it?]
 
 ## Goals
+
 [Bullet list: What success looks like]
 
 ## Non-Goals
+
 [Bullet list: What's explicitly OUT of scope—prevents scope creep]
 
 ## Requirements
+
 ### Functional Requirements
+
 [Numbered sections with specific behaviors]
 
 ### Non-Functional Requirements
+
 [Performance, security, reliability constraints]
 
 ## Existing Code Context
+
 [CRITICAL for existing projects—see below]
 
 ## Data Model
+
 [Schema changes, new tables/fields]
 
 ## API Endpoints (if applicable)
+
 [Request/response formats]
 
 ## Verification Commands
+
 [How to verify the implementation works]
 ```
 
@@ -90,18 +108,23 @@ Each PRD should represent a cohesive feature. Avoid bundling unrelated changes.
 
 ```markdown
 ## User Journeys
+
 [Step-by-step flows for key scenarios]
 
 ## Tech Stack / Dependencies
+
 [Libraries, services, tools to use]
 
 ## Rollout Plan
+
 [Phased delivery if applicable]
 
 ## Risks & Mitigations
+
 [Known risks and how to handle them]
 
 ## Open Questions
+
 [Decisions you've made with rationale—NOT actual open questions]
 ```
 
@@ -117,6 +140,7 @@ This section is what differentiates a feature PRD from a greenfield PRD. It give
 ## Existing Code Context
 
 ### Project Structure
+
 - API handlers: `internal/api/handlers/`
 - Business logic: `internal/services/`
 - Data access: `internal/repository/`
@@ -124,29 +148,35 @@ This section is what differentiates a feature PRD from a greenfield PRD. It give
 - Config: `internal/config/config.go`
 
 ### Relevant Files
+
 These files will be modified or extended:
+
 - `internal/api/router.go` - Add new routes
 - `internal/services/user_service.go` - Add preference methods
 - `internal/repository/user_repo.go` - Add preference queries
 
 ### Patterns to Follow
+
 - Use `github.com/go-chi/chi` for routing (see existing handlers)
 - Use `sqlx` for database queries (see `internal/repository/`)
 - Error handling: wrap with `fmt.Errorf("context: %w", err)`
 - Validation: use `github.com/go-playground/validator`
 
 ### Database
+
 - Using PostgreSQL
 - Migrations in `migrations/` using golang-migrate
 - Connection pool in `internal/db/db.go`
 
 ### Testing Patterns
+
 - Unit tests: `*_test.go` alongside source files
 - Integration tests: `internal/integration/`
 - Use `testify/assert` and `testify/require`
 - Mock interfaces using `internal/mocks/` (generated with mockery)
 
 ### Configuration
+
 - Config loaded from environment via `internal/config/`
 - Add new config fields to `Config` struct
 - Document in `.env.example`
@@ -155,6 +185,7 @@ These files will be modified or extended:
 ### Why This Matters
 
 Without this context, Ralph might:
+
 - Create files in wrong locations
 - Use different patterns than existing code
 - Miss integration points
@@ -172,12 +203,14 @@ Structure by feature area with numbered sections (helps with traceability):
 ### Functional Requirements
 
 #### 8.1 User Preferences Storage
+
 - Users can store key-value preferences (theme, language, notifications)
 - Preferences are persisted in PostgreSQL `user_preferences` table
 - Default preferences applied on user creation
 - Modify `internal/repository/user_repo.go` to add preference methods
 
 #### 8.2 Preferences API
+
 - GET `/api/users/:id/preferences` - Returns all preferences
 - PUT `/api/users/:id/preferences` - Updates preferences (partial update)
 - Add handlers to `internal/api/handlers/preferences.go` (new file)
@@ -185,6 +218,7 @@ Structure by feature area with numbered sections (helps with traceability):
 - Use existing auth middleware from `internal/api/middleware/auth.go`
 
 #### 8.3 Preferences Validation
+
 - Theme: must be "light" or "dark"
 - Language: ISO 639-1 code, validated against supported languages
 - Notifications: boolean
@@ -199,16 +233,19 @@ Be specific with numbers:
 ### Non-Functional Requirements
 
 #### Performance
+
 - GET preferences: < 50ms p95 (simple key lookup)
 - PUT preferences: < 100ms p95
 - Add database index on `user_preferences.user_id`
 
 #### Security
+
 - Users can only access their own preferences (enforce in middleware)
 - Sanitize preference values to prevent XSS
 - Log preference changes for audit trail
 
 #### Reliability
+
 - Graceful handling if preferences table is unavailable
 - Return sensible defaults if user has no preferences set
 ```
@@ -224,20 +261,22 @@ Always show the full schema, not just "add a preferences table":
 
 ### user_preferences Table (New)
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique identifier |
-| user_id | UUID | FOREIGN KEY (users.id), UNIQUE | Owner |
-| theme | VARCHAR(10) | DEFAULT 'light' | UI theme |
-| language | VARCHAR(5) | DEFAULT 'en' | ISO 639-1 code |
-| email_notifications | BOOLEAN | DEFAULT true | Email opt-in |
-| created_at | TIMESTAMP | NOT NULL | Creation time |
-| updated_at | TIMESTAMP | NOT NULL | Last update |
+| Column              | Type        | Constraints                    | Description       |
+| ------------------- | ----------- | ------------------------------ | ----------------- |
+| id                  | UUID        | PRIMARY KEY                    | Unique identifier |
+| user_id             | UUID        | FOREIGN KEY (users.id), UNIQUE | Owner             |
+| theme               | VARCHAR(10) | DEFAULT 'light'                | UI theme          |
+| language            | VARCHAR(5)  | DEFAULT 'en'                   | ISO 639-1 code    |
+| email_notifications | BOOLEAN     | DEFAULT true                   | Email opt-in      |
+| created_at          | TIMESTAMP   | NOT NULL                       | Creation time     |
+| updated_at          | TIMESTAMP   | NOT NULL                       | Last update       |
 
 ### Migration
+
 Create migration file: `migrations/000X_add_user_preferences.up.sql`
 
 ### Changes to Existing Tables
+
 None required—preferences linked via foreign key.
 ```
 
@@ -254,9 +293,11 @@ Include full request/response examples:
 
 **Request:**
 ```
+
 Headers:
-  Authorization: Bearer <jwt-token>
-```
+Authorization: Bearer <jwt-token>
+
+````
 
 **Response (200 OK):**
 ```json
@@ -265,9 +306,10 @@ Headers:
   "language": "en",
   "emailNotifications": true
 }
-```
+````
 
 **Response (404 Not Found):**
+
 ```json
 {
   "error": "User not found"
@@ -277,15 +319,18 @@ Headers:
 ### PUT /api/users/:id/preferences
 
 **Request:**
+
 ```json
 {
   "theme": "dark",
   "emailNotifications": false
 }
 ```
+
 Note: Partial updates supported—omitted fields unchanged.
 
 **Response (200 OK):**
+
 ```json
 {
   "theme": "dark",
@@ -295,6 +340,7 @@ Note: Partial updates supported—omitted fields unchanged.
 ```
 
 **Response (400 Bad Request):**
+
 ```json
 {
   "error": "Validation failed",
@@ -303,7 +349,8 @@ Note: Partial updates supported—omitted fields unchanged.
   }
 }
 ```
-```
+
+````
 
 ---
 
@@ -332,15 +379,18 @@ golangci-lint run
 
 # Integration tests (if applicable)
 go test -tags=integration ./internal/integration/...
-```
+````
 
 ### Manual Verification
+
 After implementation, verify:
+
 1. Create user via existing registration flow
 2. GET /api/users/:id/preferences returns defaults
 3. PUT /api/users/:id/preferences updates values
 4. Preferences persist across sessions
-```
+
+````
 
 ---
 
@@ -473,9 +523,10 @@ After implementation, verify:
 **Request:**
 ```json
 { ... }
-```
+````
 
 **Response:**
+
 ```json
 { ... }
 ```
@@ -483,11 +534,13 @@ After implementation, verify:
 ## User Journeys
 
 ### Happy Path: [Scenario]
+
 1. [Step 1]
 2. [Step 2]
 3. [Step 3]
 
 ### Edge Case: [Scenario]
+
 1. [Step 1]
 2. [Step 2]
 
@@ -507,13 +560,15 @@ golangci-lint run
 ## Risks & Mitigations
 
 ### Risk: [Risk description]
+
 **Mitigation**: [How to handle it]
 
 ## Decisions Made
 
 - [Decision 1]: Chose X over Y because [reason]
 - [Decision 2]: Chose A over B because [reason]
-```
+
+````
 
 ---
 
@@ -586,9 +641,11 @@ Migration: `migrations/000X_add_user_avatar.up.sql`
 go test ./internal/api/handlers/...
 go test ./pkg/upload/...
 go build ./...
-```
+````
+
 ```
 
 ---
 
 This guide ensures your PRDs are decomposed into well-structured, executable tasks that integrate cleanly with your existing codebase.
+```
