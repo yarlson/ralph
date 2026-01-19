@@ -2,6 +2,8 @@ package decomposer
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/config"
 )
 
 // mockRunner is a mock implementation of claude.Runner for testing
@@ -146,37 +149,44 @@ func TestNewDecomposer(t *testing.T) {
 
 func TestSystemPrompt_Contains_RequiredElements(t *testing.T) {
 	// Verify the system prompt contains key elements
-	assert.Contains(t, systemPrompt, "Task Decomposer")
-	assert.Contains(t, systemPrompt, "YAML")
-	assert.Contains(t, systemPrompt, "tasks:")
-	assert.Contains(t, systemPrompt, "id:")
-	assert.Contains(t, systemPrompt, "title:")
-	assert.Contains(t, systemPrompt, "parentId:")
-	assert.Contains(t, systemPrompt, "dependsOn:")
-	assert.Contains(t, systemPrompt, "acceptance:")
-	assert.Contains(t, systemPrompt, "verify:")
-	assert.Contains(t, systemPrompt, "labels:")
-	assert.Contains(t, systemPrompt, "DRY")
-	assert.Contains(t, systemPrompt, "KISS")
-	assert.Contains(t, systemPrompt, "YAGNI")
+	assert.Contains(t, getSystemPrompt(), "Task Decomposer")
+	assert.Contains(t, getSystemPrompt(), "YAML")
+	assert.Contains(t, getSystemPrompt(), "tasks:")
+	assert.Contains(t, getSystemPrompt(), "id:")
+	assert.Contains(t, getSystemPrompt(), "title:")
+	assert.Contains(t, getSystemPrompt(), "parentId:")
+	assert.Contains(t, getSystemPrompt(), "dependsOn:")
+	assert.Contains(t, getSystemPrompt(), "acceptance:")
+	assert.Contains(t, getSystemPrompt(), "verify:")
+	assert.Contains(t, getSystemPrompt(), "labels:")
+	assert.Contains(t, getSystemPrompt(), "DRY")
+	assert.Contains(t, getSystemPrompt(), "KISS")
+	assert.Contains(t, getSystemPrompt(), "YAGNI")
 }
 
 func TestSystemPrompt_ContainsTaskModelRules(t *testing.T) {
 	// Verify task model rules are present
-	assert.Contains(t, systemPrompt, "ONE root task")
-	assert.Contains(t, systemPrompt, "epic")
-	assert.Contains(t, systemPrompt, "leaf tasks")
-	assert.Contains(t, systemPrompt, "kebab-case")
+	assert.Contains(t, getSystemPrompt(), "ONE root task")
+	assert.Contains(t, getSystemPrompt(), "epic")
+	assert.Contains(t, getSystemPrompt(), "leaf tasks")
+	assert.Contains(t, getSystemPrompt(), "kebab-case")
 }
 
 func TestSystemPrompt_ContainsMappingRules(t *testing.T) {
 	// Verify mapping rules are present
-	assert.Contains(t, systemPrompt, "Requirements")
-	assert.Contains(t, systemPrompt, "User Journeys")
-	assert.Contains(t, systemPrompt, "Analytics")
-	assert.Contains(t, systemPrompt, "Risks")
-	assert.Contains(t, systemPrompt, "Rollout")
-	assert.Contains(t, systemPrompt, "Non-goals")
+	assert.Contains(t, getSystemPrompt(), "Requirements")
+	assert.Contains(t, getSystemPrompt(), "User Journeys")
+	assert.Contains(t, getSystemPrompt(), "Analytics")
+	assert.Contains(t, getSystemPrompt(), "Risks")
+	assert.Contains(t, getSystemPrompt(), "Rollout")
+	assert.Contains(t, getSystemPrompt(), "Non-goals")
+}
+
+func TestSystemPrompt_ContainsForbiddenTestPatterns(t *testing.T) {
+	// Verify forbidden test/validation patterns are documented
+	assert.Contains(t, getSystemPrompt(), "Test-only tasks")
+	assert.Contains(t, getSystemPrompt(), "Validation-only tasks")
+	assert.Contains(t, getSystemPrompt(), "Tests are PART of implementation, not separate tasks")
 }
 
 func TestExtractYAMLContent_CodeBlockVariants(t *testing.T) {
@@ -210,4 +220,428 @@ func TestExtractYAMLContent_CodeBlockVariants(t *testing.T) {
 			assert.False(t, strings.Contains(yaml, "```"))
 		})
 	}
+}
+
+// validTaskYAML is a valid YAML string for testing that passes all linter checks.
+const validTaskYAML = `tasks:
+  - id: test-root
+    title: Test Root
+    description: This is the root task
+    status: open
+    acceptance:
+      - Root task exists
+    verify:
+      - ["go", "test", "./..."]
+`
+
+// invalidTaskYAML has an invalid parent reference.
+const invalidTaskYAML = `tasks:
+  - id: test-child
+    title: Test Child
+    description: This is a child task
+    parentId: non-existent-parent
+    status: open
+    acceptance:
+      - Child task exists
+    verify:
+      - ["go", "test", "./..."]
+`
+
+// fixedTaskYAML is the corrected version after retry.
+const fixedTaskYAML = `tasks:
+  - id: test-root
+    title: Test Root
+    description: This is the root task
+    status: open
+    acceptance:
+      - Root task exists
+    verify:
+      - ["go", "test", "./..."]
+  - id: test-child
+    title: Test Child
+    description: This is a child task
+    parentId: test-root
+    status: open
+    acceptance:
+      - Child task exists
+    verify:
+      - ["go", "test", "./..."]
+`
+
+// sequentialMockRunner returns different responses for each call.
+type sequentialMockRunner struct {
+	responses []*claude.ClaudeResponse
+	errors    []error
+	callCount int
+}
+
+func (m *sequentialMockRunner) Run(ctx context.Context, req claude.ClaudeRequest) (*claude.ClaudeResponse, error) {
+	if m.callCount >= len(m.responses) {
+		return nil, nil
+	}
+	resp := m.responses[m.callCount]
+	var err error
+	if m.callCount < len(m.errors) {
+		err = m.errors[m.callCount]
+	}
+	m.callCount++
+	return resp, err
+}
+
+func TestValidateAndRetry_Success(t *testing.T) {
+	// Test case where YAML is valid on first attempt
+	runner := &mockRunner{}
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	prdContent := "# Test PRD\nThis is a test PRD."
+
+	result, err := dec.validateAndRetry(ctx, prdContent, validTaskYAML)
+
+	require.NoError(t, err)
+	assert.Equal(t, validTaskYAML, result)
+}
+
+func TestValidateAndRetry_RetryOnError(t *testing.T) {
+	// Test case where YAML fails initially but succeeds after retry
+	runner := &sequentialMockRunner{
+		responses: []*claude.ClaudeResponse{
+			{FinalText: fixedTaskYAML},
+		},
+		errors: []error{nil},
+	}
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	prdContent := "# Test PRD\nThis is a test PRD."
+
+	result, err := dec.validateAndRetry(ctx, prdContent, invalidTaskYAML)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "test-root")
+	assert.Contains(t, result, "test-child")
+}
+
+func TestValidateAndRetry_MaxRetriesExceeded(t *testing.T) {
+	// Test case where YAML keeps failing after max retries
+	runner := &sequentialMockRunner{
+		responses: []*claude.ClaudeResponse{
+			{FinalText: invalidTaskYAML},
+			{FinalText: invalidTaskYAML},
+		},
+		errors: []error{nil, nil},
+	}
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	prdContent := "# Test PRD\nThis is a test PRD."
+
+	_, err := dec.validateAndRetry(ctx, prdContent, invalidTaskYAML)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed after")
+}
+
+func TestValidateAndRetry_InvalidYAMLSyntax(t *testing.T) {
+	// Test case where YAML has invalid syntax
+	runner := &sequentialMockRunner{
+		responses: []*claude.ClaudeResponse{
+			{FinalText: validTaskYAML},
+		},
+		errors: []error{nil},
+	}
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	prdContent := "# Test PRD\nThis is a test PRD."
+	invalidSyntax := "tasks:\n  - id: test\n    title: [invalid yaml"
+
+	result, err := dec.validateAndRetry(ctx, prdContent, invalidSyntax)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "id: test-root")
+	assert.Contains(t, result, "title: Test Root")
+}
+
+func TestValidateAndRetry_ClaudeError(t *testing.T) {
+	// Test case where Claude returns an error during retry
+	runner := &sequentialMockRunner{
+		responses: []*claude.ClaudeResponse{nil},
+		errors:    []error{assert.AnError},
+	}
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	prdContent := "# Test PRD\nThis is a test PRD."
+
+	_, err := dec.validateAndRetry(ctx, prdContent, invalidTaskYAML)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get fixed YAML from Claude")
+}
+
+func TestMaxValidationRetries_Value(t *testing.T) {
+	assert.Equal(t, 2, maxValidationRetries)
+}
+
+func TestDecompose_WritesToDefaultPath(t *testing.T) {
+	// Create a temporary directory to simulate the work directory
+	tmpDir := t.TempDir()
+
+	// Create a PRD file
+	prdPath := filepath.Join(tmpDir, "PRD.md")
+	prdContent := "# Test PRD\nThis is a test PRD."
+	require.NoError(t, os.WriteFile(prdPath, []byte(prdContent), 0644))
+
+	// Create a mock runner that returns valid YAML
+	runner := &mockRunner{
+		response: &claude.ClaudeResponse{
+			SessionID:    "test-session-123",
+			Model:        "claude-sonnet-4",
+			FinalText:    validTaskYAML,
+			TotalCostUSD: 0.05,
+		},
+	}
+
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	result, err := dec.Decompose(ctx, DecomposeRequest{
+		PRDPath: prdPath,
+		WorkDir: tmpDir,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify OutputPath is set correctly
+	expectedPath := filepath.Join(tmpDir, config.DefaultTasksFile)
+	assert.Equal(t, expectedPath, result.OutputPath)
+
+	// Verify the directory was created
+	tasksDir := filepath.Dir(expectedPath)
+	info, err := os.Stat(tasksDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+
+	// Verify the file was written
+	content, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+	// Compare trimmed content since YAML extraction trims the content
+	assert.Equal(t, strings.TrimSpace(validTaskYAML), strings.TrimSpace(string(content)))
+}
+
+// TestDecompose_ValidYAMLSucceeds tests that valid YAML passes on first attempt
+// without triggering any retry logic.
+func TestDecompose_ValidYAMLSucceeds(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a PRD file
+	prdPath := filepath.Join(tmpDir, "PRD.md")
+	prdContent := "# Test PRD\nThis is a test PRD for valid YAML test."
+	require.NoError(t, os.WriteFile(prdPath, []byte(prdContent), 0644))
+
+	// Mock runner returns valid YAML on first call
+	runner := &mockRunner{
+		response: &claude.ClaudeResponse{
+			SessionID:    "valid-session",
+			Model:        "claude-sonnet-4",
+			FinalText:    validTaskYAML,
+			TotalCostUSD: 0.01,
+		},
+	}
+
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	result, err := dec.Decompose(ctx, DecomposeRequest{
+		PRDPath: prdPath,
+		WorkDir: tmpDir,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "valid-session", result.SessionID)
+	assert.Contains(t, result.YAMLContent, "test-root")
+	assert.Contains(t, result.YAMLContent, "Test Root")
+
+	// Verify the file was written
+	content, err := os.ReadFile(result.OutputPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "test-root")
+}
+
+// TestDecompose_InvalidYAMLRetries tests that invalid YAML triggers retry
+// and succeeds after Claude fixes it.
+func TestDecompose_InvalidYAMLRetries(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a PRD file
+	prdPath := filepath.Join(tmpDir, "PRD.md")
+	prdContent := "# Test PRD\nThis is a test PRD for retry test."
+	require.NoError(t, os.WriteFile(prdPath, []byte(prdContent), 0644))
+
+	// Sequential runner: first returns invalid YAML, then returns fixed YAML on retry
+	runner := &sequentialMockRunner{
+		responses: []*claude.ClaudeResponse{
+			// First call: Decompose returns invalid YAML (orphan child)
+			{
+				SessionID:    "initial-session",
+				Model:        "claude-sonnet-4",
+				FinalText:    invalidTaskYAML,
+				TotalCostUSD: 0.01,
+			},
+			// Second call: askClaudeToFix returns corrected YAML
+			{
+				SessionID:    "fix-session",
+				Model:        "claude-sonnet-4",
+				FinalText:    fixedTaskYAML,
+				TotalCostUSD: 0.02,
+			},
+		},
+		errors: []error{nil, nil},
+	}
+
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	result, err := dec.Decompose(ctx, DecomposeRequest{
+		PRDPath: prdPath,
+		WorkDir: tmpDir,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify the fixed YAML is returned
+	assert.Contains(t, result.YAMLContent, "test-root")
+	assert.Contains(t, result.YAMLContent, "test-child")
+	assert.Contains(t, result.YAMLContent, "parentId: test-root")
+
+	// Verify both calls were made (initial + fix)
+	assert.Equal(t, 2, runner.callCount)
+}
+
+// TestDecompose_MaxRetriesExceeded tests that decomposition fails after max retries
+// when Claude cannot produce valid YAML.
+func TestDecompose_MaxRetriesExceeded(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a PRD file
+	prdPath := filepath.Join(tmpDir, "PRD.md")
+	prdContent := "# Test PRD\nThis is a test PRD for max retries test."
+	require.NoError(t, os.WriteFile(prdPath, []byte(prdContent), 0644))
+
+	// Sequential runner: always returns invalid YAML, exhausting retries
+	runner := &sequentialMockRunner{
+		responses: []*claude.ClaudeResponse{
+			// First call: Decompose returns invalid YAML
+			{
+				SessionID: "initial-session",
+				FinalText: invalidTaskYAML,
+			},
+			// Second call: First retry still returns invalid YAML
+			{
+				SessionID: "retry-1-session",
+				FinalText: invalidTaskYAML,
+			},
+			// Third call: Second retry still returns invalid YAML
+			{
+				SessionID: "retry-2-session",
+				FinalText: invalidTaskYAML,
+			},
+		},
+		errors: []error{nil, nil, nil},
+	}
+
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	_, err := dec.Decompose(ctx, DecomposeRequest{
+		PRDPath: prdPath,
+		WorkDir: tmpDir,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
+	assert.Contains(t, err.Error(), "retries")
+
+	// Verify all retry attempts were made (initial + maxValidationRetries fix attempts)
+	assert.Equal(t, maxValidationRetries+1, runner.callCount)
+}
+
+// capturingMockRunner captures request details for inspection.
+type capturingMockRunner struct {
+	responses []*claude.ClaudeResponse
+	errors    []error
+	callCount int
+	requests  []claude.ClaudeRequest
+}
+
+func (m *capturingMockRunner) Run(ctx context.Context, req claude.ClaudeRequest) (*claude.ClaudeResponse, error) {
+	m.requests = append(m.requests, req)
+	if m.callCount >= len(m.responses) {
+		return nil, nil
+	}
+	resp := m.responses[m.callCount]
+	var err error
+	if m.callCount < len(m.errors) {
+		err = m.errors[m.callCount]
+	}
+	m.callCount++
+	return resp, err
+}
+
+// TestDecompose_FixPromptContainsContext tests that the fix prompt sent to Claude
+// includes the original PRD content and the validation errors.
+func TestDecompose_FixPromptContainsContext(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a PRD file with distinctive content
+	prdPath := filepath.Join(tmpDir, "PRD.md")
+	prdContent := "# Unique PRD Title\nThis PRD has unique content for testing fix prompt context."
+	require.NoError(t, os.WriteFile(prdPath, []byte(prdContent), 0644))
+
+	// Capturing runner: first returns invalid YAML, then returns fixed YAML
+	runner := &capturingMockRunner{
+		responses: []*claude.ClaudeResponse{
+			// First call: Decompose returns invalid YAML
+			{
+				SessionID: "initial-session",
+				FinalText: invalidTaskYAML,
+			},
+			// Second call: askClaudeToFix returns corrected YAML
+			{
+				SessionID: "fix-session",
+				FinalText: fixedTaskYAML,
+			},
+		},
+		errors: []error{nil, nil},
+	}
+
+	dec := NewDecomposer(runner)
+
+	ctx := context.Background()
+	_, err := dec.Decompose(ctx, DecomposeRequest{
+		PRDPath: prdPath,
+		WorkDir: tmpDir,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, len(runner.requests), "expected 2 requests: initial + fix")
+
+	// Inspect the fix request (second call)
+	fixRequest := runner.requests[1]
+
+	// Verify fix prompt contains PRD content
+	assert.Contains(t, fixRequest.Prompt, "Unique PRD Title", "fix prompt should contain PRD title")
+	assert.Contains(t, fixRequest.Prompt, "unique content for testing", "fix prompt should contain PRD content")
+
+	// Verify fix prompt contains the failed YAML
+	assert.Contains(t, fixRequest.Prompt, "test-child", "fix prompt should contain failed YAML")
+	assert.Contains(t, fixRequest.Prompt, "non-existent-parent", "fix prompt should contain invalid parent reference")
+
+	// Verify fix prompt contains validation error context
+	// The invalid YAML has orphan parent reference, so error should mention parent
+	assert.Contains(t, fixRequest.Prompt, "Validation Errors", "fix prompt should have validation errors section")
 }

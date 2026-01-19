@@ -290,3 +290,81 @@ func TestImportFromYAML_ComplexDependsOn(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"child-1", "child-2"}, grandchild.DependsOn)
 }
+
+func TestParseYAML_Valid(t *testing.T) {
+	yamlContent := []byte(`tasks:
+  - id: task-1
+    title: "First Task"
+    description: "Description here"
+    status: open
+    acceptance:
+      - "Criterion 1"
+    verify:
+      - ["go", "test", "./..."]
+    labels:
+      area: core
+  - id: task-2
+    title: "Second Task"
+    parentId: task-1
+    dependsOn:
+      - task-1
+    status: completed
+`)
+
+	result, err := ParseYAML(yamlContent)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Len(t, result.Tasks, 2)
+
+	// Check first task
+	assert.Equal(t, "task-1", result.Tasks[0].ID)
+	assert.Equal(t, "First Task", result.Tasks[0].Title)
+	assert.Equal(t, "Description here", result.Tasks[0].Description)
+	assert.Equal(t, "open", result.Tasks[0].Status)
+	assert.Equal(t, []string{"Criterion 1"}, result.Tasks[0].Acceptance)
+	assert.Equal(t, [][]string{{"go", "test", "./..."}}, result.Tasks[0].Verify)
+	assert.Equal(t, "core", result.Tasks[0].Labels["area"])
+
+	// Check second task
+	assert.Equal(t, "task-2", result.Tasks[1].ID)
+	assert.Equal(t, "Second Task", result.Tasks[1].Title)
+	assert.Equal(t, "task-1", result.Tasks[1].ParentID)
+	assert.Equal(t, []string{"task-1"}, result.Tasks[1].DependsOn)
+	assert.Equal(t, "completed", result.Tasks[1].Status)
+}
+
+func TestParseYAML_Invalid(t *testing.T) {
+	tests := []struct {
+		name        string
+		yamlContent []byte
+	}{
+		{
+			name: "malformed YAML syntax",
+			yamlContent: []byte(`tasks:
+  - id: task-1
+    title: "Task
+    invalid yaml here
+`),
+		},
+		{
+			name:        "invalid YAML structure",
+			yamlContent: []byte(`not: valid: yaml: structure`),
+		},
+		{
+			name: "invalid indentation",
+			yamlContent: []byte(`tasks:
+- id: task-1
+  title: "Task"
+    extra_indent: bad
+`),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := ParseYAML(tc.yamlContent)
+			assert.Error(t, err)
+			assert.Nil(t, result)
+		})
+	}
+}

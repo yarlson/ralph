@@ -5,17 +5,25 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/yarlson/ralph/internal/claude"
+	"github.com/yarlson/ralph/internal/config"
+	"github.com/yarlson/ralph/internal/taskstore"
 )
 
-// systemPrompt is the Task Decomposer prompt that instructs Claude how to convert PRDs to tasks.
-const systemPrompt = `You are Task Decomposer, a PRD→Execution Plan agent.
+// maxValidationRetries is the maximum number of times to retry validation with Claude fixing errors.
+const maxValidationRetries = 2
+
+// getSystemPrompt returns the Task Decomposer prompt that instructs Claude how to convert PRDs to tasks.
+func getSystemPrompt() string {
+	return `You are Task Decomposer, a PRD→Execution Plan agent.
 
 GOAL
-Convert an input PRD (Markdown) into a single YAML file named task.yaml containing a hierarchical, dependency-aware task list that is directly executable by autonomous Claude Code sessions.
+Convert an input PRD (Markdown) into a single YAML file at ` + config.DefaultTasksFile + ` containing a hierarchical, dependency-aware task list that is directly executable by autonomous Claude Code sessions.
 
 EXECUTION MODEL (CRITICAL)
 - Each leaf task will be executed by a separate Claude Code session running autonomously.
@@ -68,15 +76,24 @@ FILE EXPLICITNESS (CRITICAL)
 ID RULES
 - Use kebab-case IDs.
 - Prefix all IDs with a short stable project slug derived from PRD title (e.g., "acme-onboarding-…").
-- IDs must be globally unique within task.yaml.
+- IDs must be globally unique within the tasks file.
 - parentId and dependsOn must reference valid IDs in the same file.
 - No circular dependencies.
 
 ACCEPTANCE & VERIFICATION
+- Tests are PART of implementation, not separate tasks. Every implementation task should include writing/updating tests.
 - For each leaf task, include 3–5 acceptance criteria that are objectively testable.
 - Acceptance criteria must be verifiable by examining code or running tests—no subjective criteria.
+- Acceptance criteria for implementation tasks MUST include test requirements (e.g., "Unit tests for X pass", "Test coverage for Y exists").
+- Only leaf tasks (tasks with no children) require verify commands. Epic tasks (tasks with children) do NOT need verify commands since they are organizational containers—their children handle verification.
 - Add verify commands when the PRD/stack makes them clear (e.g., Go: ["go","test","./..."], JS: ["npm","test"]).
 - If the stack/commands are unknown, omit verify rather than guessing.
+- Example format with integrated tests:
+  acceptance:
+    - "cmd/handler.go implements HandleRequest function"
+    - "internal/handler/handler_test.go contains tests for HandleRequest"
+    - "go test ./internal/handler/... passes"
+    - "Error cases are handled and tested"
 
 MAPPING RULES (PRD → TASKS)
 - Requirements (Functional + Non-Functional) become tasks. Prioritize P0/P1/P2 by labels, not by expanding scope.
@@ -111,6 +128,10 @@ Never generate tasks that:
 - Bundle multiple unrelated changes: "Implement A, B, C, and D" (split into 4 tasks)
 - Lack file specificity: "Update the handlers" (which handlers? which files?)
 - Have vague acceptance: "Code is clean", "Performance is good" (not objectively testable)
+- Test-only tasks: "Write tests for...", "Add unit tests", "Create test suite" (tests MUST be part of implementation tasks)
+- Validation-only tasks: "Run linter", "Verify build", "Run tests" (verification is part of implementation, not separate)
+- Tests and verification MUST be part of implementation tasks, not separate tasks
+- Each implementation task includes: code changes + tests + verification in acceptance criteria
 
 AMBIGUITY RESOLUTION
 If the PRD is ambiguous or has open questions:
@@ -134,11 +155,12 @@ Verify mentally that:
 - Sibling tasks within an epic are chained via dependsOn when order matters (not left as independent parallels).
 
 FILE HANDLING
-- If you can write files in the environment, save as task.yaml.
+- If you can write files in the environment, save as ` + config.DefaultTasksFile + `.
 - If not, output the full YAML content (still YAML only).
 
 BEGIN
-Convert the provided PRD.md into task.yaml now.`
+Convert the provided PRD.md into ` + config.DefaultTasksFile + ` now.`
+}
 
 // DecomposeRequest contains the parameters for PRD decomposition.
 type DecomposeRequest struct {
@@ -165,6 +187,9 @@ type DecomposeResult struct {
 
 	// RawEventsPath is the path to the saved Claude NDJSON log.
 	RawEventsPath string
+
+	// OutputPath is the path where tasks.yaml was written.
+	OutputPath string
 }
 
 // Decomposer handles PRD to task decomposition using Claude Code.
@@ -188,14 +213,14 @@ func (d *Decomposer) Decompose(ctx context.Context, req DecomposeRequest) (*Deco
 	}
 
 	// Construct user prompt with PRD content
-	userPrompt := fmt.Sprintf("Convert the following PRD into task.yaml:\n\n%s", string(prdContent))
+	userPrompt := fmt.Sprintf("Convert the following PRD into %s:\n\n%s", config.DefaultTasksFile, string(prdContent))
 
 	// Call Claude Code
 	claudeReq := claude.ClaudeRequest{
 		Cwd:          req.WorkDir,
-		SystemPrompt: systemPrompt,
+		SystemPrompt: getSystemPrompt(),
 		Prompt:       userPrompt,
-		AllowedTools: []string{"Write"}, // Only allow Write tool to create task.yaml
+		AllowedTools: []string{"Write"}, // Only allow Write tool to create tasks file
 	}
 
 	resp, err := d.runner.Run(ctx, claudeReq)
@@ -209,12 +234,36 @@ func (d *Decomposer) Decompose(ctx context.Context, req DecomposeRequest) (*Deco
 		return nil, fmt.Errorf("no YAML content found in Claude response")
 	}
 
+	// Validate YAML and retry if needed
+	validatedYAML, err := d.validateAndRetry(ctx, string(prdContent), yamlContent)
+	if err != nil {
+		return nil, fmt.Errorf("YAML validation failed: %w", err)
+	}
+
+	// Determine output path - use WorkDir as base if provided
+	outputPath := config.DefaultTasksFile
+	if req.WorkDir != "" {
+		outputPath = filepath.Join(req.WorkDir, config.DefaultTasksFile)
+	}
+
+	// Create the tasks directory if it doesn't exist
+	tasksDir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(tasksDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create tasks directory: %w", err)
+	}
+
+	// Write the validated YAML to the output file
+	if err := os.WriteFile(outputPath, []byte(validatedYAML), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write tasks file: %w", err)
+	}
+
 	return &DecomposeResult{
-		YAMLContent:   yamlContent,
+		YAMLContent:   validatedYAML,
 		SessionID:     resp.SessionID,
 		Model:         resp.Model,
 		TotalCostUSD:  resp.TotalCostUSD,
 		RawEventsPath: resp.RawEventsPath,
+		OutputPath:    outputPath,
 	}, nil
 }
 
@@ -243,4 +292,125 @@ func extractYAMLContent(resp *claude.ClaudeResponse) string {
 
 	// No YAML found
 	return ""
+}
+
+// fixPromptTemplate is the prompt template for asking Claude to fix YAML validation errors.
+const fixPromptTemplate = `The following task YAML was generated from this PRD but has validation errors.
+Please fix the YAML and output ONLY the corrected YAML (no explanations).
+
+## Original PRD:
+%s
+
+## Failed YAML:
+%s
+
+## Validation Errors:
+%s
+
+Output the corrected YAML only:`
+
+// validateAndRetry validates YAML content and retries with Claude if there are errors.
+// It parses the YAML, converts to tasks, and runs the linter.
+// If validation fails, it asks Claude to fix the YAML and retries up to maxValidationRetries times.
+func (d *Decomposer) validateAndRetry(ctx context.Context, prdContent, yamlContent string) (string, error) {
+	currentYAML := yamlContent
+
+	for attempt := 0; attempt <= maxValidationRetries; attempt++ {
+		// Parse YAML
+		yamlFile, err := taskstore.ParseYAML([]byte(currentYAML))
+		if err != nil {
+			// YAML syntax error - ask Claude to fix
+			if attempt >= maxValidationRetries {
+				return "", fmt.Errorf("validation failed after %d retries: YAML parse error: %w", maxValidationRetries, err)
+			}
+			fixedYAML, fixErr := d.askClaudeToFix(ctx, prdContent, currentYAML, err.Error())
+			if fixErr != nil {
+				return "", fixErr
+			}
+			currentYAML = fixedYAML
+			continue
+		}
+
+		// Convert YAMLTasks to Tasks for linting
+		tasks := make([]*taskstore.Task, 0, len(yamlFile.Tasks))
+		for _, yt := range yamlFile.Tasks {
+			task := convertYAMLTaskToTask(yt)
+			tasks = append(tasks, task)
+		}
+
+		// Run linter
+		lintResult := taskstore.LintTaskSet(tasks)
+		if lintResult.Valid {
+			return currentYAML, nil
+		}
+
+		// Validation failed - collect errors
+		if attempt >= maxValidationRetries {
+			return "", fmt.Errorf("validation failed after %d retries: %v", maxValidationRetries, lintResult.Error())
+		}
+
+		// Ask Claude to fix
+		errMsg := lintResult.Error().Error()
+		fixedYAML, fixErr := d.askClaudeToFix(ctx, prdContent, currentYAML, errMsg)
+		if fixErr != nil {
+			return "", fixErr
+		}
+		currentYAML = fixedYAML
+	}
+
+	return "", fmt.Errorf("validation failed after %d retries", maxValidationRetries)
+}
+
+// askClaudeToFix asks Claude to fix YAML validation errors.
+func (d *Decomposer) askClaudeToFix(ctx context.Context, prdContent, yamlContent, errorMsg string) (string, error) {
+	fixPrompt := fmt.Sprintf(fixPromptTemplate, prdContent, yamlContent, errorMsg)
+
+	req := claude.ClaudeRequest{
+		SystemPrompt: getSystemPrompt(),
+		Prompt:       fixPrompt,
+		AllowedTools: []string{}, // No tools needed for text-only response
+	}
+
+	resp, err := d.runner.Run(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get fixed YAML from Claude: %w", err)
+	}
+
+	fixedYAML := extractYAMLContent(resp)
+	if fixedYAML == "" {
+		// Use raw response if no YAML block found
+		fixedYAML = strings.TrimSpace(resp.FinalText)
+		if fixedYAML == "" {
+			fixedYAML = strings.TrimSpace(resp.StreamText)
+		}
+	}
+
+	return fixedYAML, nil
+}
+
+// convertYAMLTaskToTask converts a YAMLTask to a Task for linting purposes.
+func convertYAMLTaskToTask(yt taskstore.YAMLTask) *taskstore.Task {
+	now := time.Now()
+	task := &taskstore.Task{
+		ID:          yt.ID,
+		Title:       yt.Title,
+		Description: yt.Description,
+		DependsOn:   yt.DependsOn,
+		Acceptance:  yt.Acceptance,
+		Verify:      yt.Verify,
+		Labels:      yt.Labels,
+		Status:      taskstore.StatusOpen,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if yt.ParentID != "" {
+		task.ParentID = &yt.ParentID
+	}
+
+	if yt.Status != "" {
+		task.Status = taskstore.TaskStatus(yt.Status)
+	}
+
+	return task
 }

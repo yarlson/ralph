@@ -27,6 +27,16 @@ type YAMLFile struct {
 	Tasks []YAMLTask `yaml:"tasks"`
 }
 
+// ParseYAML parses YAML content into a YAMLFile structure.
+// This is useful for validation before writing to disk.
+func ParseYAML(data []byte) (*YAMLFile, error) {
+	var yamlFile YAMLFile
+	if err := yaml.Unmarshal(data, &yamlFile); err != nil {
+		return nil, err
+	}
+	return &yamlFile, nil
+}
+
 // ImportError represents an error that occurred during import of a specific task.
 type ImportError struct {
 	ID     string

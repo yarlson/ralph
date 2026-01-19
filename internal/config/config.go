@@ -6,6 +6,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultTasksFile is the canonical location for the task YAML file.
+const DefaultTasksFile = ".ralph/tasks/tasks.yaml"
+
 // Config holds all Ralph harness configuration
 type Config struct {
 	Repo         RepoConfig         `mapstructure:"repo"`
