@@ -212,6 +212,12 @@ func (d *Decomposer) Decompose(ctx context.Context, req DecomposeRequest) (*Deco
 		return nil, fmt.Errorf("failed to read PRD file: %w", err)
 	}
 
+	// Determine output path - use WorkDir as base if provided
+	outputPath := config.DefaultTasksFile
+	if req.WorkDir != "" {
+		outputPath = filepath.Join(req.WorkDir, config.DefaultTasksFile)
+	}
+
 	// Construct user prompt with PRD content
 	userPrompt := fmt.Sprintf("Convert the following PRD into %s:\n\n%s", config.DefaultTasksFile, string(prdContent))
 
@@ -228,10 +234,18 @@ func (d *Decomposer) Decompose(ctx context.Context, req DecomposeRequest) (*Deco
 		return nil, fmt.Errorf("claude execution failed: %w", err)
 	}
 
-	// Extract YAML content from response
-	yamlContent := extractYAMLContent(resp)
+	// Try to get YAML content - first check if Claude wrote the file directly
+	var yamlContent string
+	if fileContent, err := os.ReadFile(outputPath); err == nil {
+		// File was created by Claude using Write tool
+		yamlContent = string(fileContent)
+	} else {
+		// File wasn't created, try to extract YAML from response text
+		yamlContent = extractYAMLContent(resp)
+	}
+
 	if yamlContent == "" {
-		return nil, fmt.Errorf("no YAML content found in Claude response")
+		return nil, fmt.Errorf("no YAML content found: file not created and no YAML in response")
 	}
 
 	// Validate YAML and retry if needed
@@ -240,19 +254,13 @@ func (d *Decomposer) Decompose(ctx context.Context, req DecomposeRequest) (*Deco
 		return nil, fmt.Errorf("YAML validation failed: %w", err)
 	}
 
-	// Determine output path - use WorkDir as base if provided
-	outputPath := config.DefaultTasksFile
-	if req.WorkDir != "" {
-		outputPath = filepath.Join(req.WorkDir, config.DefaultTasksFile)
-	}
-
 	// Create the tasks directory if it doesn't exist
 	tasksDir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(tasksDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create tasks directory: %w", err)
 	}
 
-	// Write the validated YAML to the output file
+	// Write the validated YAML to the output file (overwrites if Claude created it)
 	if err := os.WriteFile(outputPath, []byte(validatedYAML), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tasks file: %w", err)
 	}
