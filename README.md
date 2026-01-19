@@ -6,6 +6,14 @@ pick a ready task -> ask Claude Code to implement it -> run verification -> comm
 
 It is designed for repos where you want repeatable, auditable agent work: task graphs, verification gates, git commits, and a local state directory you can inspect and version as needed.
 
+## What "Ralph Wiggum loop" means
+
+Ralph is a loop, not a model.
+
+The core idea is simple: don’t stop at the first attempt. Each iteration produces changes, then verification decides whether the task is actually done (tests pass, acceptance criteria met). If not, the next iteration runs with the failures as feedback. Repeat until it passes, or until a safety limit is hit.
+
+The name is a nod to Ralph Wiggum from The Simpsons: well-meaning, occasionally clueless, but persistent. The technique was popularized as a literal shell loop around an AI coding agent; this project turns that idea into a repo-grade harness with task selection, verification, commits, and on-disk state under `.ralph/`.
+
 ## What Ralph does
 
 - Runs an iteration loop that selects a ready leaf task and drives Claude Code to completion.
