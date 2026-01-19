@@ -8,6 +8,10 @@ It is designed for repos where you want repeatable, auditable agent work: task g
 
 ## What "Ralph Wiggum loop" means
 
+<p align="center">
+  <img src="assets/ralph.jpg" alt="Ralph Wiggum" />
+</p>
+
 Ralph is a loop, not a model.
 
 The core idea is simple: don’t stop at the first attempt. Each iteration produces changes, then verification decides whether the task is actually done (tests pass, acceptance criteria met). If not, the next iteration runs with the failures as feedback. Repeat until it passes, or until a safety limit is hit.
