@@ -10,13 +10,14 @@ import (
 
 // Directory names for the .ralph structure.
 const (
-	RalphDir      = ".ralph"
-	TasksDir      = "tasks"
-	StateDir      = "state"
-	LogsDir       = "logs"
-	ClaudeLogsDir = "claude"
-	ArchiveDir    = "archive"
-	PausedFile    = "paused"
+	RalphDir        = ".ralph"
+	TasksDir        = "tasks"
+	StateDir        = "state"
+	LogsDir         = "logs"
+	ClaudeLogsDir   = "claude"
+	OpenCodeLogsDir = "opencode"
+	ArchiveDir      = "archive"
+	PausedFile      = "paused"
 )
 
 // RalphDirPath returns the path to the .ralph directory.
@@ -44,6 +45,11 @@ func ClaudeLogsDirPath(root string) string {
 	return filepath.Join(root, RalphDir, LogsDir, ClaudeLogsDir)
 }
 
+// OpenCodeLogsDirPath returns the path to the OpenCode logs directory.
+func OpenCodeLogsDirPath(root string) string {
+	return filepath.Join(root, RalphDir, LogsDir, OpenCodeLogsDir)
+}
+
 // ArchiveDirPath returns the path to the archive directory.
 func ArchiveDirPath(root string) string {
 	return filepath.Join(root, RalphDir, ArchiveDir)
@@ -56,6 +62,7 @@ func ArchiveDirPath(root string) string {
 //   - .ralph/state/
 //   - .ralph/logs/
 //   - .ralph/logs/claude/
+//   - .ralph/logs/opencode/
 //   - .ralph/archive/
 //
 // The function is idempotent - calling it multiple times is safe.
@@ -73,6 +80,7 @@ func EnsureRalphDir(root string) error {
 		StateDirPath(root),
 		LogsDirPath(root),
 		ClaudeLogsDirPath(root),
+		OpenCodeLogsDirPath(root),
 		ArchiveDirPath(root),
 	}
 

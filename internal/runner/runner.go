@@ -17,6 +17,8 @@ import (
 	gitpkg "github.com/yarlson/ralph/internal/git"
 	"github.com/yarlson/ralph/internal/loop"
 	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/opencode"
+	"github.com/yarlson/ralph/internal/provider"
 	"github.com/yarlson/ralph/internal/selector"
 	"github.com/yarlson/ralph/internal/state"
 	"github.com/yarlson/ralph/internal/taskstore"
@@ -28,7 +30,8 @@ type Options struct {
 	Once          bool
 	MaxIterations int
 	Branch        string
-	Stream        bool // Stream Claude output to console
+	Stream        bool // Stream agent output to console
+	Provider      string
 }
 
 // Run executes the main iteration loop.
@@ -61,6 +64,11 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 		return fmt.Errorf("failed to create .ralph directory: %w", err)
 	}
 
+	providerName, err := provider.Resolve(opts.Provider, cfg.Provider)
+	if err != nil {
+		return err
+	}
+
 	// Open task store
 	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
 	store, err := taskstore.NewLocalStore(tasksPath)
@@ -76,7 +84,10 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 
 	// Set up dependencies
 	logsDir := state.LogsDirPath(workDir)
-	claudeLogsDir := state.ClaudeLogsDirPath(workDir)
+	providerLogsDir := state.ClaudeLogsDirPath(workDir)
+	if providerName == provider.OpenCode {
+		providerLogsDir = state.OpenCodeLogsDirPath(workDir)
+	}
 	progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
 
 	// Create progress file if it doesn't exist
@@ -92,20 +103,41 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 		}
 	}
 
-	// Create Claude runner
-	claudeCommand := "claude"
-	var claudeArgs []string
-	if len(cfg.Claude.Command) > 0 {
-		claudeCommand = cfg.Claude.Command[0]
-		if len(cfg.Claude.Command) > 1 {
-			claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
+	// Create Claude or OpenCode runner
+	var claudeRunner claude.Runner
+	switch providerName {
+	case provider.OpenCode:
+		openCodeCommand := "opencode"
+		var openCodeArgs []string
+		if len(cfg.OpenCode.Command) > 0 {
+			openCodeCommand = cfg.OpenCode.Command[0]
+			if len(cfg.OpenCode.Command) > 1 {
+				openCodeArgs = append(openCodeArgs, cfg.OpenCode.Command[1:]...)
+			}
 		}
-	}
-	claudeArgs = append(claudeArgs, cfg.Claude.Args...)
+		openCodeArgs = append(openCodeArgs, cfg.OpenCode.Args...)
 
-	claudeRunner := claude.NewSubprocessRunner(claudeCommand, claudeLogsDir)
-	if len(claudeArgs) > 0 {
-		claudeRunner.WithBaseArgs(claudeArgs)
+		openCodeRunner := opencode.NewSubprocessRunner(openCodeCommand, providerLogsDir)
+		if len(openCodeArgs) > 0 {
+			openCodeRunner.WithBaseArgs(openCodeArgs)
+		}
+		claudeRunner = openCodeRunner
+	default:
+		claudeCommand := "claude"
+		var claudeArgs []string
+		if len(cfg.Claude.Command) > 0 {
+			claudeCommand = cfg.Claude.Command[0]
+			if len(cfg.Claude.Command) > 1 {
+				claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
+			}
+		}
+		claudeArgs = append(claudeArgs, cfg.Claude.Args...)
+
+		claudeSubprocess := claude.NewSubprocessRunner(claudeCommand, providerLogsDir)
+		if len(claudeArgs) > 0 {
+			claudeSubprocess.WithBaseArgs(claudeArgs)
+		}
+		claudeRunner = claudeSubprocess
 	}
 
 	// Create verifier with sandbox mode enforcement if enabled

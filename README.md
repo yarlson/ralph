@@ -1,6 +1,6 @@
 # Ralph
 
-Ralph is a Go harness that runs [Claude Code](https://claude.ai) against a repository in a tight loop:
+Ralph is a Go harness that runs [Claude Code](https://claude.ai) or [OpenCode](https://opencode.ai) against a repository in a tight loop:
 
 pick a ready task -> ask Claude Code to implement it -> run verification -> commit -> repeat.
 
@@ -20,9 +20,9 @@ The name is a nod to Ralph Wiggum from The Simpsons: well-meaning, occasionally 
 
 ## What Ralph does
 
-- Runs an iteration loop that selects a ready leaf task and drives Claude Code to completion.
+- Runs an iteration loop that selects a ready leaf task and drives the selected provider to completion.
 - Enforces task dependencies (rejects cycles, only schedules tasks whose deps are done).
-- Can turn a PRD markdown file into a tasks.yaml-style plan (via Claude Code), then run it.
+- Can turn a PRD markdown file into a tasks.yaml-style plan (via the selected provider), then run it.
 - Runs verification commands before committing (tests, typecheck, lint, custom commands).
 - Keeps state on disk under `.ralph/` so the run is reviewable and resumable.
 - Has guardrails for churn and repeated failures (gutter detection), plus optional sandboxing.
@@ -30,7 +30,7 @@ The name is a nod to Ralph Wiggum from The Simpsons: well-meaning, occasionally 
 ## Prerequisites
 
 - Go 1.25.5+
-- Claude Code CLI installed and configured (`claude` on your PATH)
+- Claude Code CLI (`claude`) or OpenCode CLI (`opencode`) installed and configured
 - Git
 
 ## Install
@@ -111,6 +111,7 @@ Flags (run `ralph --help` for the authoritative list):
 | `--branch`         | `-b`  | Git branch override                      |
 | `--dry-run`        |       | Show what would be done                  |
 | `--config`         |       | Config file path (default: `ralph.yaml`) |
+| `--provider`       |       | Provider: `claude` or `opencode`         |
 
 ### Status
 

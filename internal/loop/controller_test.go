@@ -1043,7 +1043,7 @@ func TestController_RunIteration_EmitsProgressOutput(t *testing.T) {
 
 	output := progress.String()
 	assert.Contains(t, output, "▶ Task: Test Task")
-	assert.Contains(t, output, "⏳ Invoking Claude")
+	assert.Contains(t, output, "⏳ Invoking agent")
 	assert.Contains(t, output, "✓ Verification")
 	assert.Contains(t, output, "📝 Committed: def456")
 	assert.Contains(t, output, "Completed in")

@@ -202,7 +202,7 @@ func ExtractText(m map[string]any) (text string, mode string) {
 	sub := getString(m, "subtype")
 
 	// Common wrapper keys used by various streamers.
-	for _, k := range []string{"chunk", "data", "payload", "event"} {
+	for _, k := range []string{"chunk", "data", "payload", "event", "part"} {
 		if inner, ok := m[k].(map[string]any); ok {
 			if s, md := ExtractText(inner); s != "" {
 				return s, md
@@ -359,6 +359,11 @@ func ExtractAnyText(m map[string]any) string {
 	}
 	if msg, ok := m["message"].(map[string]any); ok {
 		if s := extractMessageContentText(msg); s != "" {
+			return s
+		}
+	}
+	if part, ok := m["part"].(map[string]any); ok {
+		if s := ExtractAnyText(part); s != "" {
 			return s
 		}
 	}

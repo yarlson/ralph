@@ -14,6 +14,8 @@ import (
 	"github.com/yarlson/ralph/internal/config"
 	"github.com/yarlson/ralph/internal/decomposer"
 	"github.com/yarlson/ralph/internal/memory"
+	"github.com/yarlson/ralph/internal/opencode"
+	"github.com/yarlson/ralph/internal/provider"
 	"github.com/yarlson/ralph/internal/runner"
 	"github.com/yarlson/ralph/internal/state"
 	"github.com/yarlson/ralph/internal/taskstore"
@@ -25,15 +27,21 @@ type Options struct {
 	MaxIterations int
 	Parent        string
 	Branch        string
-	Stream        bool // Stream Claude output to console
+	Stream        bool
+	Provider      string
 }
 
 // RunFromPRD runs the full pipeline: decompose → import → init → run.
 func RunFromPRD(ctx context.Context, prdPath, workDir string, cfg *config.Config, opts Options, stdout, stderr io.Writer) error {
 	_, _ = fmt.Fprintf(stdout, "Analyzing PRD: %s\n", prdPath)
 
+	providerName, err := provider.Resolve(opts.Provider, cfg.Provider)
+	if err != nil {
+		return err
+	}
+
 	// Step 1: Decompose PRD to YAML
-	yamlPath, err := decomposePRD(ctx, prdPath, workDir, cfg, stdout)
+	yamlPath, err := decomposePRD(ctx, prdPath, workDir, cfg, providerName, stdout)
 	if err != nil {
 		return err
 	}
@@ -55,6 +63,7 @@ func RunFromPRD(ctx context.Context, prdPath, workDir string, cfg *config.Config
 		MaxIterations: opts.MaxIterations,
 		Branch:        opts.Branch,
 		Stream:        opts.Stream,
+		Provider:      providerName,
 	}
 	return runner.Run(ctx, workDir, cfg, parentTaskID, runOpts, stdout, stderr)
 }
@@ -62,6 +71,11 @@ func RunFromPRD(ctx context.Context, prdPath, workDir string, cfg *config.Config
 // RunFromYAML runs the pipeline: import → init → run.
 func RunFromYAML(ctx context.Context, yamlPath, workDir string, cfg *config.Config, opts Options, stdout, stderr io.Writer) error {
 	_, _ = fmt.Fprintf(stdout, "Initializing from YAML: %s\n", yamlPath)
+
+	providerName, err := provider.Resolve(opts.Provider, cfg.Provider)
+	if err != nil {
+		return err
+	}
 
 	// Step 1: Import tasks
 	if err := importTasks(yamlPath, cfg, stdout); err != nil {
@@ -80,37 +94,68 @@ func RunFromYAML(ctx context.Context, yamlPath, workDir string, cfg *config.Conf
 		MaxIterations: opts.MaxIterations,
 		Branch:        opts.Branch,
 		Stream:        opts.Stream,
+		Provider:      providerName,
 	}
 	return runner.Run(ctx, workDir, cfg, parentTaskID, runOpts, stdout, stderr)
 }
 
-func decomposePRD(ctx context.Context, prdPath, workDir string, cfg *config.Config, output io.Writer) (string, error) {
-	claudeLogsDir := filepath.Join(workDir, ".ralph", "logs", "claude")
-	if err := os.MkdirAll(claudeLogsDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create Claude logs directory: %w", err)
+func decomposePRD(ctx context.Context, prdPath, workDir string, cfg *config.Config, providerName string, output io.Writer) (string, error) {
+	providerLogsDir := state.ClaudeLogsDirPath(workDir)
+	if providerName == provider.OpenCode {
+		providerLogsDir = state.OpenCodeLogsDirPath(workDir)
+	}
+	if err := os.MkdirAll(providerLogsDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create provider logs directory: %w", err)
 	}
 
-	claudeCommand := "claude"
-	var claudeArgs []string
-	if len(cfg.Claude.Command) > 0 {
-		claudeCommand = cfg.Claude.Command[0]
-		if len(cfg.Claude.Command) > 1 {
-			claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
+	var runnerImpl claude.Runner
+	switch providerName {
+	case provider.OpenCode:
+		openCodeCommand := "opencode"
+		var openCodeArgs []string
+		if len(cfg.OpenCode.Command) > 0 {
+			openCodeCommand = cfg.OpenCode.Command[0]
+			if len(cfg.OpenCode.Command) > 1 {
+				openCodeArgs = append(openCodeArgs, cfg.OpenCode.Command[1:]...)
+			}
 		}
+		openCodeArgs = append(openCodeArgs, cfg.OpenCode.Args...)
+		openCodeRunner := opencode.NewSubprocessRunner(openCodeCommand, providerLogsDir)
+		if len(openCodeArgs) > 0 {
+			openCodeRunner = openCodeRunner.WithBaseArgs(openCodeArgs)
+		}
+		runnerImpl = openCodeRunner
+	default:
+		claudeCommand := "claude"
+		var claudeArgs []string
+		if len(cfg.Claude.Command) > 0 {
+			claudeCommand = cfg.Claude.Command[0]
+			if len(cfg.Claude.Command) > 1 {
+				claudeArgs = append(claudeArgs, cfg.Claude.Command[1:]...)
+			}
+		}
+		claudeArgs = append(claudeArgs, cfg.Claude.Args...)
+		claudeRunner := claude.NewSubprocessRunner(claudeCommand, providerLogsDir)
+		if len(claudeArgs) > 0 {
+			claudeRunner = claudeRunner.WithBaseArgs(claudeArgs)
+		}
+		runnerImpl = claudeRunner
 	}
-	claudeArgs = append(claudeArgs, cfg.Claude.Args...)
 
-	claudeRunner := claude.NewSubprocessRunner(claudeCommand, claudeLogsDir)
-	if len(claudeArgs) > 0 {
-		claudeRunner = claudeRunner.WithBaseArgs(claudeArgs)
-	}
-
-	dec := decomposer.NewDecomposer(claudeRunner)
+	dec := decomposer.NewDecomposer(runnerImpl)
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	_, _ = fmt.Fprintf(output, "Using Claude to analyze and generate tasks...\n")
+	providerLabel := providerName
+	switch providerName {
+	case provider.Claude:
+		providerLabel = "Claude"
+	case provider.OpenCode:
+		providerLabel = "OpenCode"
+	}
+
+	_, _ = fmt.Fprintf(output, "Using %s to analyze and generate tasks...\n", providerLabel)
 
 	req := decomposer.DecomposeRequest{
 		PRDPath: prdPath,
@@ -130,9 +175,16 @@ func decomposePRD(ctx context.Context, prdPath, workDir string, cfg *config.Conf
 	taskCount := countTasksInYAML(result.YAMLContent)
 
 	_, _ = fmt.Fprintf(output, "✓ Generated %d tasks: %s\n", taskCount, outputPath)
-	_, _ = fmt.Fprintf(output, "  Session: %s\n", result.SessionID)
-	_, _ = fmt.Fprintf(output, "  Model: %s\n", result.Model)
-	_, _ = fmt.Fprintf(output, "  Cost: $%.4f\n\n", result.TotalCostUSD)
+	if result.SessionID != "" {
+		_, _ = fmt.Fprintf(output, "  Session: %s\n", result.SessionID)
+	}
+	if result.Model != "" {
+		_, _ = fmt.Fprintf(output, "  Model: %s\n", result.Model)
+	}
+	if result.TotalCostUSD > 0 {
+		_, _ = fmt.Fprintf(output, "  Cost: $%.4f\n", result.TotalCostUSD)
+	}
+	_, _ = fmt.Fprintln(output)
 
 	return outputPath, nil
 }

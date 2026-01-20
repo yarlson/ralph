@@ -25,9 +25,13 @@ tasks:
 memory:
   progress_file: ".ralph/progress.md"
   archive_dir: ".ralph/archive"
+provider: "opencode"
 claude:
   command: ["claude", "code"]
   args: ["--verbose"]
+opencode:
+  command: ["opencode", "run"]
+  args: ["--model", "openai/gpt-4o-mini"]
 verification:
   commands:
     - ["go", "build", "./..."]
@@ -67,6 +71,13 @@ safety:
 	assert.Equal(t, []string{"claude", "code"}, cfg.Claude.Command)
 	assert.Equal(t, []string{"--verbose"}, cfg.Claude.Args)
 
+	// Provider
+	assert.Equal(t, "opencode", cfg.Provider)
+
+	// OpenCode
+	assert.Equal(t, []string{"opencode", "run"}, cfg.OpenCode.Command)
+	assert.Equal(t, []string{"--model", "openai/gpt-4o-mini"}, cfg.OpenCode.Args)
+
 	// Verification
 	assert.Len(t, cfg.Verification.Commands, 2)
 	assert.Equal(t, []string{"go", "build", "./..."}, cfg.Verification.Commands[0])
@@ -100,11 +111,14 @@ func TestLoadConfig_WithDefaults(t *testing.T) {
 
 	assert.Equal(t, ".ralph/progress.md", cfg.Memory.ProgressFile)
 	assert.Equal(t, ".ralph/archive", cfg.Memory.ArchiveDir)
-	assert.Equal(t, 1048576, cfg.Memory.MaxProgressBytes)     // 1MB default
+	assert.Equal(t, 1048576, cfg.Memory.MaxProgressBytes) // 1MB default
 	assert.Equal(t, 20, cfg.Memory.MaxRecentIterations)
 
+	assert.Equal(t, "claude", cfg.Provider)
 	assert.Equal(t, []string{"claude"}, cfg.Claude.Command)
 	assert.Empty(t, cfg.Claude.Args)
+	assert.Equal(t, []string{"opencode", "run"}, cfg.OpenCode.Command)
+	assert.Empty(t, cfg.OpenCode.Args)
 
 	assert.Empty(t, cfg.Verification.Commands)
 

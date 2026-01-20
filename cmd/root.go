@@ -31,6 +31,7 @@ var (
 	rootBranch        string
 	rootDryRun        bool
 	rootStream        bool
+	rootProvider      string
 )
 
 // NewRootCmd creates the root command for ralph CLI.
@@ -56,7 +57,8 @@ Optionally, you can provide a file argument:
 	rootCmd.Flags().StringVarP(&rootParent, "parent", "p", "", "explicit parent task ID")
 	rootCmd.Flags().StringVarP(&rootBranch, "branch", "b", "", "git branch override")
 	rootCmd.Flags().BoolVar(&rootDryRun, "dry-run", false, "show what would be done")
-	rootCmd.Flags().BoolVar(&rootStream, "stream", false, "stream Claude output to console")
+	rootCmd.Flags().BoolVar(&rootStream, "stream", false, "stream agent output to console")
+	rootCmd.PersistentFlags().StringVar(&rootProvider, "provider", "", "LLM provider (claude or opencode)")
 
 	rootCmd.AddCommand(newStatusCmd())
 	rootCmd.AddCommand(newFixCmd())
@@ -142,6 +144,7 @@ func runRootAutoInit(cmd *cobra.Command) error {
 		MaxIterations: rootMaxIterations,
 		Branch:        rootBranch,
 		Stream:        rootStream,
+		Provider:      rootProvider,
 	}
 
 	return runner.Run(cmd.Context(), workDir, cfg, parentTaskID, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
@@ -182,6 +185,7 @@ func runPRDBootstrap(cmd *cobra.Command, prdPath string) error {
 		Parent:        rootParent,
 		Branch:        rootBranch,
 		Stream:        rootStream,
+		Provider:      rootProvider,
 	}
 
 	return bootstrap.RunFromPRD(cmd.Context(), prdPath, workDir, cfg, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
@@ -222,6 +226,7 @@ func runYAMLBootstrap(cmd *cobra.Command, yamlPath string) error {
 		Parent:        rootParent,
 		Branch:        rootBranch,
 		Stream:        rootStream,
+		Provider:      rootProvider,
 	}
 
 	return bootstrap.RunFromYAML(cmd.Context(), yamlPath, workDir, cfg, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())

@@ -14,7 +14,9 @@ type Config struct {
 	Repo         RepoConfig         `mapstructure:"repo"`
 	Tasks        TasksConfig        `mapstructure:"tasks"`
 	Memory       MemoryConfig       `mapstructure:"memory"`
+	Provider     string             `mapstructure:"provider"`
 	Claude       ClaudeConfig       `mapstructure:"claude"`
+	OpenCode     OpenCodeConfig     `mapstructure:"opencode"`
 	Verification VerificationConfig `mapstructure:"verification"`
 	Loop         LoopConfig         `mapstructure:"loop"`
 	Safety       SafetyConfig       `mapstructure:"safety"`
@@ -35,14 +37,20 @@ type TasksConfig struct {
 
 // MemoryConfig holds memory/progress file settings
 type MemoryConfig struct {
-	ProgressFile          string `mapstructure:"progress_file"`
-	ArchiveDir            string `mapstructure:"archive_dir"`
-	MaxProgressBytes      int    `mapstructure:"max_progress_bytes"`
-	MaxRecentIterations   int    `mapstructure:"max_recent_iterations"`
+	ProgressFile        string `mapstructure:"progress_file"`
+	ArchiveDir          string `mapstructure:"archive_dir"`
+	MaxProgressBytes    int    `mapstructure:"max_progress_bytes"`
+	MaxRecentIterations int    `mapstructure:"max_recent_iterations"`
 }
 
 // ClaudeConfig holds Claude Code invocation settings
 type ClaudeConfig struct {
+	Command []string `mapstructure:"command"`
+	Args    []string `mapstructure:"args"`
+}
+
+// OpenCodeConfig holds OpenCode invocation settings
+type OpenCodeConfig struct {
 	Command []string `mapstructure:"command"`
 	Args    []string `mapstructure:"args"`
 }
@@ -172,6 +180,13 @@ func setDefaults(v *viper.Viper) {
 	// Claude defaults
 	v.SetDefault("claude.command", []string{"claude"})
 	v.SetDefault("claude.args", []string{})
+
+	// OpenCode defaults
+	v.SetDefault("opencode.command", []string{"opencode", "run"})
+	v.SetDefault("opencode.args", []string{})
+
+	// Provider defaults
+	v.SetDefault("provider", "claude")
 
 	// Verification defaults (empty by default)
 	v.SetDefault("verification.commands", [][]string{})

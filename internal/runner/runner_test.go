@@ -27,6 +27,7 @@ func TestRun_WritesProgressOutput(t *testing.T) {
 	runCmd(t, workDir, "git", "init")
 	runCmd(t, workDir, "git", "config", "user.email", "test@example.com")
 	runCmd(t, workDir, "git", "config", "user.name", "Test User")
+	runCmd(t, workDir, "git", "config", "commit.gpgsign", "false")
 
 	mockClaude := filepath.Join(workDir, "mock-claude.sh")
 	script := `#!/bin/bash
@@ -78,7 +79,7 @@ echo '{"type":"result","subtype":"success","result":"done","total_cost_usd":0.01
 
 	output := stdout.String()
 	assert.Contains(t, output, "▶ Task: Child Task")
-	assert.Contains(t, output, "⏳ Invoking Claude")
+	assert.Contains(t, output, "⏳ Invoking agent")
 	assert.Contains(t, output, "📝 Committed:")
 }
 

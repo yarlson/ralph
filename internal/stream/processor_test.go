@@ -188,6 +188,14 @@ func TestExtractText(t *testing.T) {
 			expectedMode: "message",
 		},
 		{
+			name: "wrapped in part",
+			event: map[string]any{
+				"part": map[string]any{"text": "hello"},
+			},
+			expectedText: "hello",
+			expectedMode: "message",
+		},
+		{
 			name:         "no text",
 			event:        map[string]any{"type": "system", "subtype": "init"},
 			expectedText: "",
@@ -234,6 +242,11 @@ func TestExtractAnyText(t *testing.T) {
 			name:     "stderr field",
 			event:    map[string]any{"stderr": "error"},
 			expected: "error",
+		},
+		{
+			name:     "part wrapper",
+			event:    map[string]any{"part": map[string]any{"text": "hello"}},
+			expected: "hello",
 		},
 		{
 			name:     "empty",

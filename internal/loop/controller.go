@@ -108,14 +108,14 @@ type ControllerDeps struct {
 
 // Controller orchestrates the main iteration loop.
 type Controller struct {
-	taskStore    taskstore.Store
-	claudeRunner claude.Runner
-	verifier     verifier.Verifier
-	gitManager   git.Manager
-	logsDir      string
-	progressDir  string
-	progressFile *memory.ProgressFile
-	workDir      string
+	taskStore      taskstore.Store
+	claudeRunner   claude.Runner
+	verifier       verifier.Verifier
+	gitManager     git.Manager
+	logsDir        string
+	progressDir    string
+	progressFile   *memory.ProgressFile
+	workDir        string
 	progressWriter io.Writer
 	streamWriter   io.Writer
 
@@ -595,7 +595,7 @@ func (c *Controller) runIteration(ctx context.Context, task *taskstore.Task) *It
 		req.AllowedTools = c.allowedTools
 	}
 
-	c.writeProgress("  ⏳ Invoking Claude...\n")
+	c.writeProgress("  ⏳ Invoking agent...\n")
 	resp, err := c.claudeRunner.Run(iterationCtx, req)
 	if err != nil {
 		// Check if error is due to timeout
