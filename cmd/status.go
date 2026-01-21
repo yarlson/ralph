@@ -31,14 +31,8 @@ func runStatus(cmd *cobra.Command) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
 	// Read parent task ID
-	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+	parentIDFile := filepath.Join(workDir, config.DefaultParentIDFile)
 	parentIDBytes, err := os.ReadFile(parentIDFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -49,7 +43,7 @@ func runStatus(cmd *cobra.Command) error {
 	parentTaskID := string(parentIDBytes)
 
 	// Open task store
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	tasksPath := filepath.Join(workDir, config.DefaultTasksPath)
 	store, err := taskstore.NewLocalStore(tasksPath)
 	if err != nil {
 		return fmt.Errorf("failed to open task store: %w", err)

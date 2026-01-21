@@ -84,12 +84,7 @@ func newFixService() (*fix.Service, error) {
 		return nil, fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	tasksPath := filepath.Join(workDir, config.DefaultTasksPath)
 	store, err := taskstore.NewLocalStore(tasksPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open task store: %w", err)

@@ -6,41 +6,12 @@ import (
 	"github.com/spf13/viper"
 )
 
-// DefaultTasksFile is the canonical location for the task YAML file.
-const DefaultTasksFile = ".ralph/tasks/tasks.yaml"
-
 // Config holds all Ralph harness configuration
 type Config struct {
-	Repo         RepoConfig         `mapstructure:"repo"`
-	Tasks        TasksConfig        `mapstructure:"tasks"`
-	Memory       MemoryConfig       `mapstructure:"memory"`
-	Provider     string             `mapstructure:"provider"`
-	Claude       ClaudeConfig       `mapstructure:"claude"`
-	OpenCode     OpenCodeConfig     `mapstructure:"opencode"`
-	Verification VerificationConfig `mapstructure:"verification"`
-	Loop         LoopConfig         `mapstructure:"loop"`
-	Safety       SafetyConfig       `mapstructure:"safety"`
-}
-
-// RepoConfig holds repository-related settings
-type RepoConfig struct {
-	Root         string `mapstructure:"root"`
-	BranchPrefix string `mapstructure:"branch_prefix"`
-}
-
-// TasksConfig holds task store settings
-type TasksConfig struct {
-	Backend      string `mapstructure:"backend"`
-	Path         string `mapstructure:"path"`
-	ParentIDFile string `mapstructure:"parent_id_file"`
-}
-
-// MemoryConfig holds memory/progress file settings
-type MemoryConfig struct {
-	ProgressFile        string `mapstructure:"progress_file"`
-	ArchiveDir          string `mapstructure:"archive_dir"`
-	MaxProgressBytes    int    `mapstructure:"max_progress_bytes"`
-	MaxRecentIterations int    `mapstructure:"max_recent_iterations"`
+	Provider string         `mapstructure:"provider"`
+	Claude   ClaudeConfig   `mapstructure:"claude"`
+	OpenCode OpenCodeConfig `mapstructure:"opencode"`
+	Safety   SafetyConfig   `mapstructure:"safety"`
 }
 
 // ClaudeConfig holds Claude Code invocation settings
@@ -55,29 +26,6 @@ type OpenCodeConfig struct {
 	Args    []string `mapstructure:"args"`
 }
 
-// VerificationConfig holds verification command settings
-type VerificationConfig struct {
-	Commands [][]string `mapstructure:"commands"`
-}
-
-// LoopConfig holds iteration loop settings
-type LoopConfig struct {
-	MaxIterations          int          `mapstructure:"max_iterations"`
-	MaxMinutesPerIteration int          `mapstructure:"max_minutes_per_iteration"`
-	MaxRetries             int          `mapstructure:"max_retries"`
-	MaxVerificationRetries int          `mapstructure:"max_verification_retries"`
-	Gutter                 GutterConfig `mapstructure:"gutter"`
-}
-
-// GutterConfig holds gutter detection settings
-type GutterConfig struct {
-	MaxSameFailure     int  `mapstructure:"max_same_failure"`
-	MaxChurnCommits    int  `mapstructure:"max_churn_commits"`
-	MaxOscillations    int  `mapstructure:"max_oscillations"`
-	EnableContentHash  bool `mapstructure:"enable_content_hash"`
-	MaxChurnIterations int  `mapstructure:"max_churn_iterations"`
-	ChurnThreshold     int  `mapstructure:"churn_threshold"`
-}
 
 // SafetyConfig holds safety and sandbox settings
 type SafetyConfig struct {
@@ -162,21 +110,6 @@ func LoadConfigFromPath(configPath string) (*Config, error) {
 
 // setDefaults sets all default values for configuration
 func setDefaults(v *viper.Viper) {
-	// Repo defaults
-	v.SetDefault("repo.root", ".")
-	v.SetDefault("repo.branch_prefix", "ralph/")
-
-	// Tasks defaults
-	v.SetDefault("tasks.backend", "local")
-	v.SetDefault("tasks.path", ".ralph/tasks")
-	v.SetDefault("tasks.parent_id_file", ".ralph/parent-task-id")
-
-	// Memory defaults
-	v.SetDefault("memory.progress_file", ".ralph/progress.md")
-	v.SetDefault("memory.archive_dir", ".ralph/archive")
-	v.SetDefault("memory.max_progress_bytes", 1048576) // 1MB
-	v.SetDefault("memory.max_recent_iterations", 20)
-
 	// Claude defaults
 	v.SetDefault("claude.command", []string{"claude"})
 	v.SetDefault("claude.args", []string{})
@@ -187,21 +120,6 @@ func setDefaults(v *viper.Viper) {
 
 	// Provider defaults
 	v.SetDefault("provider", "claude")
-
-	// Verification defaults (empty by default)
-	v.SetDefault("verification.commands", [][]string{})
-
-	// Loop defaults
-	v.SetDefault("loop.max_iterations", 50)
-	v.SetDefault("loop.max_minutes_per_iteration", 20)
-	v.SetDefault("loop.max_retries", 2)
-	v.SetDefault("loop.max_verification_retries", 2)
-	v.SetDefault("loop.gutter.max_same_failure", 3)
-	v.SetDefault("loop.gutter.max_churn_commits", 2)
-	v.SetDefault("loop.gutter.max_oscillations", 2)
-	v.SetDefault("loop.gutter.enable_content_hash", true)
-	v.SetDefault("loop.gutter.max_churn_iterations", 5)
-	v.SetDefault("loop.gutter.churn_threshold", 3)
 
 	// Safety defaults
 	v.SetDefault("safety.sandbox", false)

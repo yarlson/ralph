@@ -26,6 +26,11 @@ type SubprocessRunner struct {
 	streamOpts   stream.Options
 }
 
+const (
+	defaultModel   = "openai/gpt-5.2-codex"
+	defaultVariant = "low"
+)
+
 // NewSubprocessRunner creates a new SubprocessRunner with the given command and logs directory.
 func NewSubprocessRunner(command, logsDir string) *SubprocessRunner {
 	return &SubprocessRunner{
@@ -153,10 +158,28 @@ func buildArgs(req claude.ClaudeRequest, baseArgs []string) []string {
 		args = append(args, "--continue")
 	}
 
+	if !hasAnyArg(args, "--model", "-m") && !hasAnyArg(req.ExtraArgs, "--model", "-m") {
+		args = append(args, "--model", defaultModel)
+	}
+	if !hasAnyArg(args, "--variant") && !hasAnyArg(req.ExtraArgs, "--variant") {
+		args = append(args, "--variant", defaultVariant)
+	}
+
 	args = append(args, req.ExtraArgs...)
 	args = append(args, buildPrompt(req))
 
 	return args
+}
+
+func hasAnyArg(args []string, flags ...string) bool {
+	for _, arg := range args {
+		for _, flag := range flags {
+			if arg == flag || strings.HasPrefix(arg, flag+"=") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func buildPrompt(req claude.ClaudeRequest) string {

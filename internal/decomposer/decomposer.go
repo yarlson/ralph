@@ -73,6 +73,11 @@ FILE EXPLICITNESS (CRITICAL)
 - Acceptance criteria SHOULD reference specific files: "cmd/fix.go exists with FixCmd struct"
 - Claude Code needs explicit targets—vague descriptions like "create the component" are insufficient.
 
+REQUIRED STEPS FROM PRD (CRITICAL)
+- If the PRD includes required steps or procedures, carry them into the leaf task descriptions.
+- Preserve explicit steps like reading particular files (e.g., "Read internal/selector/graph.go") and include them verbatim in the task description.
+- Treat required steps as mandatory context, not optional guidance.
+
 ID RULES
 - Use kebab-case IDs.
 - Prefix all IDs with a short stable project slug derived from PRD title (e.g., "acme-onboarding-…").

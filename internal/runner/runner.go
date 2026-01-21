@@ -36,14 +36,16 @@ type Options struct {
 
 // Run executes the main iteration loop.
 func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID string, opts Options, stdout, stderr io.Writer) error {
+	repoRoot := filepath.Join(workDir, config.DefaultRepoRoot)
+
 	// Check if paused - auto-resume if so
-	paused, err := state.IsPaused(workDir)
+	paused, err := state.IsPaused(repoRoot)
 	if err == nil && paused {
-		if err := state.SetPaused(workDir, false); err != nil {
+		if err := state.SetPaused(repoRoot, false); err != nil {
 			return fmt.Errorf("failed to auto-resume: %w", err)
 		}
 
-		tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+		tasksPath := filepath.Join(repoRoot, config.DefaultTasksPath)
 		store, storeErr := taskstore.NewLocalStore(tasksPath)
 		var taskTitle string
 		if storeErr == nil {
@@ -60,7 +62,7 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 	}
 
 	// Ensure ralph directories exist
-	if err := state.EnsureRalphDir(workDir); err != nil {
+	if err := state.EnsureRalphDir(repoRoot); err != nil {
 		return fmt.Errorf("failed to create .ralph directory: %w", err)
 	}
 
@@ -70,7 +72,7 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 	}
 
 	// Open task store
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	tasksPath := filepath.Join(repoRoot, config.DefaultTasksPath)
 	store, err := taskstore.NewLocalStore(tasksPath)
 	if err != nil {
 		return fmt.Errorf("failed to open task store: %w", err)
@@ -83,12 +85,12 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 	}
 
 	// Set up dependencies
-	logsDir := state.LogsDirPath(workDir)
-	providerLogsDir := state.ClaudeLogsDirPath(workDir)
+	logsDir := state.LogsDirPath(repoRoot)
+	providerLogsDir := state.ClaudeLogsDirPath(repoRoot)
 	if providerName == provider.OpenCode {
-		providerLogsDir = state.OpenCodeLogsDirPath(workDir)
+		providerLogsDir = state.OpenCodeLogsDirPath(repoRoot)
 	}
-	progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
+	progressPath := filepath.Join(repoRoot, config.DefaultProgressFile)
 
 	// Create progress file if it doesn't exist
 	progressFile := memory.NewProgressFile(progressPath)
@@ -141,13 +143,13 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 	}
 
 	// Create verifier with sandbox mode enforcement if enabled
-	ver := verifier.NewCommandRunner(workDir)
+	ver := verifier.NewCommandRunner(repoRoot)
 	if cfg.Safety.Sandbox && len(cfg.Safety.AllowedCommands) > 0 {
 		ver.SetAllowedCommands(cfg.Safety.AllowedCommands)
 	}
 
 	// Create git manager
-	gitManager := gitpkg.NewShellManager(workDir, cfg.Repo.BranchPrefix)
+	gitManager := gitpkg.NewShellManager(repoRoot, config.DefaultBranchPrefix)
 
 	streamWriter := io.Writer(nil)
 	if opts.Stream {
@@ -163,7 +165,7 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 		LogsDir:        logsDir,
 		ProgressDir:    filepath.Dir(progressPath),
 		ProgressFile:   progressFile,
-		WorkDir:        workDir,
+		WorkDir:        repoRoot,
 		ProgressWriter: stdout,
 		StreamWriter:   streamWriter,
 	}
@@ -173,8 +175,8 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 
 	// Configure budget limits
 	budgetLimits := loop.BudgetLimits{
-		MaxIterations:          cfg.Loop.MaxIterations,
-		MaxMinutesPerIteration: cfg.Loop.MaxMinutesPerIteration,
+		MaxIterations:          config.DefaultMaxIterations,
+		MaxMinutesPerIteration: config.DefaultMaxMinutesPerIteration,
 	}
 	if opts.MaxIterations > 0 {
 		budgetLimits.MaxIterations = opts.MaxIterations
@@ -183,21 +185,20 @@ func Run(ctx context.Context, workDir string, cfg *config.Config, parentTaskID s
 
 	// Configure gutter detection
 	gutterConfig := loop.GutterConfig{
-		MaxSameFailure:     cfg.Loop.Gutter.MaxSameFailure,
-		MaxChurnIterations: cfg.Loop.Gutter.MaxChurnCommits,
-		ChurnThreshold:     3,
+		MaxSameFailure:     config.DefaultMaxSameFailure,
+		MaxChurnIterations: config.DefaultMaxChurnIterations,
+		ChurnThreshold:     config.DefaultChurnThreshold,
+		MaxOscillations:    config.DefaultMaxOscillations,
+		EnableContentHash:  config.DefaultEnableContentHash,
 	}
 	controller.SetGutterConfig(gutterConfig)
 
 	// Configure memory limits
-	controller.SetMemoryConfig(cfg.Memory.MaxProgressBytes, cfg.Memory.MaxRecentIterations)
+	controller.SetMemoryConfig(config.DefaultMaxProgressBytes, config.DefaultMaxRecentIterations)
 
 	// Configure max retries
-	controller.SetMaxRetries(cfg.Loop.MaxRetries)
-	controller.SetMaxVerificationRetries(cfg.Loop.MaxVerificationRetries)
-
-	// Configure config-level verification commands
-	controller.SetConfigVerifyCommands(cfg.Verification.Commands)
+	controller.SetMaxRetries(config.DefaultMaxRetries)
+	controller.SetMaxVerificationRetries(config.DefaultMaxVerificationRetries)
 
 	// Configure branch override if specified
 	if opts.Branch != "" {

@@ -42,10 +42,8 @@ echo '{"type":"result","subtype":"success","result":"done","total_cost_usd":0.01
 	require.NoError(t, err)
 	cfg.Claude.Command = []string{mockClaude}
 	cfg.Claude.Args = nil
-	cfg.Loop.MaxIterations = 1
-	cfg.Loop.MaxVerificationRetries = 0
 
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	tasksPath := filepath.Join(workDir, config.DefaultTasksPath)
 	store, err := taskstore.NewLocalStore(tasksPath)
 	require.NoError(t, err)
 

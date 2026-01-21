@@ -148,47 +148,25 @@ ralph fix --force                              # Skip confirmations
 
 ## Configuration
 
-Ralph reads `ralph.yaml` from the repo root by default. If the file is missing, it uses defaults.
+Ralph reads `ralph.yaml` from the repo root by default. If the file is missing, it uses sensible defaults. The configuration is intentionally minimal—most internal parameters (loop budgets, gutter detection, file paths) are hardcoded with reasonable defaults.
 
 ### Example
 
 ```yaml
-repo:
-  root: "."
-  branch_prefix: "ralph/"
+# Provider selection: "claude" (default) or "opencode"
+provider: claude
 
-tasks:
-  backend: "local"
-  path: ".ralph/tasks"
-  parent_id_file: ".ralph/parent-task-id"
-
-memory:
-  progress_file: ".ralph/progress.md"
-  archive_dir: ".ralph/archive"
-  max_progress_bytes: 1048576 # 1MB
-  max_recent_iterations: 20
-
+# Claude Code configuration
 claude:
   command: ["claude"]
+  args: [] # e.g., ["--model", "claude-sonnet-4-20250514"]
+
+# OpenCode configuration (used when provider: opencode)
+opencode:
+  command: ["opencode", "run"]
   args: []
 
-verification:
-  commands:
-    - ["go", "test", "./..."]
-
-loop:
-  max_iterations: 50
-  max_minutes_per_iteration: 20
-  max_retries: 2
-  max_verification_retries: 2
-  gutter:
-    max_same_failure: 3
-    max_churn_commits: 2
-    max_oscillations: 2
-    enable_content_hash: true
-    max_churn_iterations: 5
-    churn_threshold: 3
-
+# Safety settings
 safety:
   sandbox: false
   allowed_commands:
@@ -197,22 +175,17 @@ safety:
     - "git"
 ```
 
-### Selected options
+### Options
 
-| Section        | Option                      | Meaning                               | Default                 |
-| -------------- | --------------------------- | ------------------------------------- | ----------------------- |
-| `repo`         | `root`                      | Repository root                       | `.`                     |
-| `repo`         | `branch_prefix`             | Prefix for feature branches           | `ralph/`                |
-| `tasks`        | `path`                      | Task store directory                  | `.ralph/tasks`          |
-| `tasks`        | `parent_id_file`            | Current parent task ID                | `.ralph/parent-task-id` |
-| `memory`       | `progress_file`             | Progress log file                     | `.ralph/progress.md`    |
-| `memory`       | `max_progress_bytes`        | Prune progress when above this size   | `1048576`               |
-| `claude`       | `command`                   | Claude Code executable                | `["claude"]`            |
-| `verification` | `commands`                  | Verification commands                 | `[]`                    |
-| `loop`         | `max_iterations`            | Hard stop per run                     | `50`                    |
-| `loop`         | `max_minutes_per_iteration` | Per-iteration time limit              | `20`                    |
-| `loop.gutter`  | `max_same_failure`          | Stop after repeating the same failure | `3`                     |
-| `safety`       | `allowed_commands`          | Allowlist for shell commands          | `["npm", "go", "git"]`  |
+| Section    | Option             | Meaning                               | Default                |
+| ---------- | ------------------ | ------------------------------------- | ---------------------- |
+| `provider` |                    | LLM provider (`claude` or `opencode`) | `claude`               |
+| `claude`   | `command`          | Claude Code executable                | `["claude"]`           |
+| `claude`   | `args`             | Additional arguments                  | `[]`                   |
+| `opencode` | `command`          | OpenCode executable                   | `["opencode", "run"]`  |
+| `opencode` | `args`             | Additional arguments                  | `[]`                   |
+| `safety`   | `sandbox`          | Enable sandbox mode                   | `false`                |
+| `safety`   | `allowed_commands` | Allowlist for shell commands          | `["npm", "go", "git"]` |
 
 ### Environment variables
 
@@ -278,7 +251,7 @@ Ralph stores state under `.ralph/`:
 ## Operational notes
 
 - Ralph makes commits. Run it in a clean working tree and review diffs as you would with any contributor.
-- Verification is your main safety net. Treat `verification.commands` as mandatory, not optional.
+- Verification is your main safety net. Define `verify` commands in your tasks—they are your quality gate.
 - If you are experimenting on a risky repo, enable sandboxing and keep `allowed_commands` tight.
 
 ## Troubleshooting
@@ -294,7 +267,7 @@ ralph fix --help
 
 ### Progress file keeps growing
 
-Ralph prunes `.ralph/progress.md` when it exceeds `memory.max_progress_bytes`. It keeps the most recent iterations as configured by `memory.max_recent_iterations`.
+Ralph prunes `.ralph/progress.md` when it exceeds 1MB. It keeps the most recent 20 iterations.
 
 ### "No ready tasks"
 

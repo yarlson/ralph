@@ -108,7 +108,7 @@ func runRootAutoInit(cmd *cobra.Command) error {
 		if err := state.EnsureRalphDir(workDir); err != nil {
 			return fmt.Errorf("failed to create .ralph directory: %w", err)
 		}
-		parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+		parentIDFile := filepath.Join(workDir, config.DefaultParentIDFile)
 		if err := os.WriteFile(parentIDFile, []byte(rootParent), 0644); err != nil {
 			return fmt.Errorf("failed to write parent-task-id: %w", err)
 		}
@@ -117,7 +117,7 @@ func runRootAutoInit(cmd *cobra.Command) error {
 		}
 	}
 
-	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+	parentIDFile := filepath.Join(workDir, config.DefaultParentIDFile)
 	parentIDBytes, err := os.ReadFile(parentIDFile)
 	var parentTaskID string
 
@@ -233,7 +233,7 @@ func runYAMLBootstrap(cmd *cobra.Command, yamlPath string) error {
 }
 
 func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) (string, bool, error) {
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	tasksPath := filepath.Join(workDir, config.DefaultTasksPath)
 	store, err := taskstore.NewLocalStore(tasksPath)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to open task store: %w", err)
@@ -268,7 +268,7 @@ func autoInitParentTask(cmd *cobra.Command, workDir string, cfg *config.Config) 
 		return "", false, fmt.Errorf("failed to create .ralph directory: %w", err)
 	}
 
-	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+	parentIDFile := filepath.Join(workDir, config.DefaultParentIDFile)
 	if err := os.WriteFile(parentIDFile, []byte(selectedTask.ID), 0644); err != nil {
 		return "", false, fmt.Errorf("failed to write parent-task-id: %w", err)
 	}

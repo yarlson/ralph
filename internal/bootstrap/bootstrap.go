@@ -192,7 +192,7 @@ func decomposePRD(ctx context.Context, prdPath, workDir string, cfg *config.Conf
 func importTasks(yamlPath string, cfg *config.Config, output io.Writer) error {
 	_, _ = fmt.Fprintf(output, "Importing tasks into store...\n")
 
-	store, err := taskstore.NewLocalStore(cfg.Tasks.Path)
+	store, err := taskstore.NewLocalStore(config.DefaultTasksPath)
 	if err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
@@ -230,7 +230,7 @@ func importTasks(yamlPath string, cfg *config.Config, output io.Writer) error {
 func initRalph(workDir string, cfg *config.Config, parentID string, output io.Writer) (string, error) {
 	_, _ = fmt.Fprintf(output, "Initializing ralph...\n")
 
-	tasksPath := filepath.Join(workDir, cfg.Tasks.Path)
+	tasksPath := filepath.Join(workDir, config.DefaultTasksPath)
 	store, err := taskstore.NewLocalStore(tasksPath)
 	if err != nil {
 		return "", fmt.Errorf("init failed: %w", err)
@@ -259,7 +259,7 @@ func initRalph(workDir string, cfg *config.Config, parentID string, output io.Wr
 		return "", fmt.Errorf("init failed: %w", err)
 	}
 
-	parentIDFile := filepath.Join(workDir, cfg.Tasks.ParentIDFile)
+	parentIDFile := filepath.Join(workDir, config.DefaultParentIDFile)
 	if err := os.WriteFile(parentIDFile, []byte(parentTaskID), 0644); err != nil {
 		return "", fmt.Errorf("init failed: %w", err)
 	}
@@ -268,7 +268,7 @@ func initRalph(workDir string, cfg *config.Config, parentID string, output io.Wr
 		return "", fmt.Errorf("init failed: %w", err)
 	}
 
-	progressPath := filepath.Join(workDir, cfg.Memory.ProgressFile)
+	progressPath := filepath.Join(workDir, config.DefaultProgressFile)
 	progressFile := memory.NewProgressFile(progressPath)
 	if !progressFile.Exists() {
 		if err := progressFile.Init(parentTask.Title, parentTaskID); err != nil {
