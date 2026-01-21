@@ -35,9 +35,6 @@ func TestFixCommand_ListEmpty(t *testing.T) {
 	require.NoError(t, os.MkdirAll(tasksDir, 0755))
 	require.NoError(t, os.MkdirAll(logsDir, 0755))
 
-	// Write ralph.yaml
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ralph.yaml"), []byte("tasks:\n  path: \".ralph/tasks\"\n"), 0644))
-
 	origDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(tmpDir))

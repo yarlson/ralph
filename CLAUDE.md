@@ -25,7 +25,7 @@ gofmt -w .              # Format
 | loop       | `internal/loop/`       | Iteration controller, budgets, gutter detection |
 | reporter   | `internal/reporter/`   | Status display, reports                         |
 | prompt     | `internal/prompt/`     | Task context building                           |
-| config     | `internal/config/`     | ralph.yaml loading                              |
+| config     | `internal/config/`     | Global configuration loading                   |
 | state      | `internal/state/`      | .ralph directory management                     |
 | decomposer | `internal/decomposer/` | PRD → task YAML via Claude                      |
 | runner     | `internal/runner/`     | Loop execution orchestration                    |
@@ -38,7 +38,7 @@ gofmt -w .              # Format
 
 `ralph [file]` · `status` · `fix`
 
-Root command accepts PRD (.md) or task (.yaml) files. Config: `ralph.yaml`.
+Root command accepts PRD (.md) or task (.yaml) files. Config: `~/.config/ralph/config.yaml`.
 
 ## State Files
 

@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/viper"
 )
@@ -27,7 +26,6 @@ type OpenCodeConfig struct {
 	Args    []string `mapstructure:"args"`
 }
 
-
 // SafetyConfig holds safety and sandbox settings
 type SafetyConfig struct {
 	Sandbox         bool     `mapstructure:"sandbox"`
@@ -35,17 +33,10 @@ type SafetyConfig struct {
 }
 
 // LoadConfigWithFile loads configuration from a specific file if provided,
-// otherwise falls back to LoadConfig with the working directory.
-func LoadConfigWithFile(workDir, configFile string) (*Config, error) {
+// otherwise falls back to GlobalConfigPath.
+func LoadConfigWithFile(configFile string) (*Config, error) {
 	if configFile != "" {
 		return LoadConfigFromPath(configFile)
-	}
-
-	localPath := filepath.Join(workDir, "ralph.yaml")
-	if _, err := os.Stat(localPath); err == nil {
-		return LoadConfig(workDir)
-	} else if !os.IsNotExist(err) {
-		return nil, err
 	}
 
 	globalPath, err := GlobalConfigPath()
@@ -54,35 +45,6 @@ func LoadConfigWithFile(workDir, configFile string) (*Config, error) {
 	}
 
 	return LoadConfigFromPath(globalPath)
-}
-
-// LoadConfig loads configuration from ralph.yaml in the given directory.
-// If no config file exists, sensible defaults are returned.
-func LoadConfig(dir string) (*Config, error) {
-	v := viper.New()
-
-	// Set defaults
-	setDefaults(v)
-
-	// Configure viper
-	v.SetConfigName("ralph")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(dir)
-
-	// Read config file (ignore not found errors)
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, err
-		}
-	}
-
-	// Unmarshal into Config struct
-	cfg := &Config{}
-	if err := v.Unmarshal(cfg); err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
 }
 
 // LoadConfigFromPath loads configuration from a specific file path

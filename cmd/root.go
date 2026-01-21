@@ -99,7 +99,7 @@ func runRootAutoInit(cmd *cobra.Command) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	cfg, err := config.LoadConfigWithFile(GetConfigFile())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -174,7 +174,7 @@ func runPRDBootstrap(cmd *cobra.Command, prdPath string) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	cfg, err := config.LoadConfigWithFile(GetConfigFile())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -215,7 +215,7 @@ func runYAMLBootstrap(cmd *cobra.Command, yamlPath string) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	cfg, err := config.LoadConfigWithFile(workDir, GetConfigFile())
+	cfg, err := config.LoadConfigWithFile(GetConfigFile())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

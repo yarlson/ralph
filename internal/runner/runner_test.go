@@ -38,7 +38,7 @@ echo '{"type":"result","subtype":"success","result":"done","total_cost_usd":0.01
 `
 	require.NoError(t, os.WriteFile(mockClaude, []byte(script), 0755))
 
-	cfg, err := config.LoadConfig(workDir)
+	cfg, err := config.LoadConfigWithFile("")
 	require.NoError(t, err)
 	cfg.Claude.Command = []string{mockClaude}
 	cfg.Claude.Args = nil

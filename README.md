@@ -103,15 +103,15 @@ The optional file can be:
 
 Flags (run `ralph --help` for the authoritative list):
 
-| Flag               | Short | Description                              |
-| ------------------ | ----- | ---------------------------------------- |
-| `--once`           | `-1`  | Run a single iteration                   |
-| `--max-iterations` | `-n`  | Max iterations (0 uses config default)   |
-| `--parent`         | `-p`  | Explicit parent task ID                  |
-| `--branch`         | `-b`  | Git branch override                      |
-| `--dry-run`        |       | Show what would be done                  |
-| `--config`         |       | Config file path (default: `~/.config/ralph/config.yaml` or `ralph.yaml`) |
-| `--provider`       |       | Provider: `claude` or `opencode`         |
+| Flag               | Short | Description                                               |
+| ------------------ | ----- | --------------------------------------------------------- |
+| `--once`           | `-1`  | Run a single iteration                                    |
+| `--max-iterations` | `-n`  | Max iterations (0 uses config default)                    |
+| `--parent`         | `-p`  | Explicit parent task ID                                   |
+| `--branch`         | `-b`  | Git branch override                                       |
+| `--dry-run`        |       | Show what would be done                                   |
+| `--config`         |       | Config file path (default: `~/.config/ralph/config.yaml`) |
+| `--provider`       |       | Provider: `claude` or `opencode`                          |
 
 ### Status
 
@@ -149,9 +149,9 @@ ralph fix --force                              # Skip confirmations
 ## Configuration
 
 Ralph looks for configuration in the following order:
+
 1. File specified by the `--config` flag
-2. `ralph.yaml` in the current repository root
-3. `~/.config/ralph/config.yaml` (or `$XDG_CONFIG_HOME/ralph/config.yaml`)
+2. `~/.config/ralph/config.yaml` (or `$XDG_CONFIG_HOME/ralph/config.yaml`)
 
 If no configuration file is found, it uses sensible defaults. The configuration is intentionally minimal—most internal parameters (loop budgets, gutter detection, file paths) are hardcoded with reasonable defaults.
 
@@ -263,7 +263,7 @@ Ralph stores state under `.ralph/`:
 
 ### Config or flags look wrong
 
-Validate `ralph.yaml` as YAML and check the command help output:
+Validate your configuration file as YAML and check the command help output:
 
 ```bash
 ralph --help
