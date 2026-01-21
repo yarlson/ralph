@@ -15,7 +15,7 @@ func TestRootCommand(t *testing.T) {
 		cmd := NewRootCmd()
 		flag := cmd.PersistentFlags().Lookup("config")
 		require.NotNil(t, flag)
-		assert.Equal(t, "ralph.yaml", flag.DefValue)
+		assert.Equal(t, "", flag.DefValue)
 	})
 
 	t.Run("help shows subcommands", func(t *testing.T) {

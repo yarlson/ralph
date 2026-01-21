@@ -156,15 +156,21 @@ provider: "opencode"
 	assert.Equal(t, "opencode", cfg.Provider)
 }
 
-func TestLoadConfigWithFile_WithEmptyConfigFile(t *testing.T) {
+func TestLoadConfigWithFile_PrefersLocalConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "ralph.yaml")
+	localPath := filepath.Join(tmpDir, "ralph.yaml")
 
 	configContent := `
 provider: "opencode"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(localPath, []byte(configContent), 0644)
 	require.NoError(t, err)
+
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	globalPath := filepath.Join(globalDir, "ralph", "config.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(globalPath), 0755))
+	require.NoError(t, os.WriteFile(globalPath, []byte("provider: \"claude\"\n"), 0644))
 
 	cfg, err := LoadConfigWithFile(tmpDir, "")
 	require.NoError(t, err)
@@ -172,8 +178,26 @@ provider: "opencode"
 	assert.Equal(t, "opencode", cfg.Provider)
 }
 
-func TestLoadConfigWithFile_FallbackToDefault(t *testing.T) {
+func TestLoadConfigWithFile_GlobalFallback(t *testing.T) {
 	tmpDir := t.TempDir()
+
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	globalPath := filepath.Join(globalDir, "ralph", "config.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(globalPath), 0755))
+	require.NoError(t, os.WriteFile(globalPath, []byte("provider: \"opencode\"\n"), 0644))
+
+	cfg, err := LoadConfigWithFile(tmpDir, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, "opencode", cfg.Provider)
+}
+
+func TestLoadConfigWithFile_NoConfigDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
 
 	cfg, err := LoadConfigWithFile(tmpDir, "")
 	require.NoError(t, err)

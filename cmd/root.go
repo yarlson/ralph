@@ -51,7 +51,7 @@ Optionally, you can provide a file argument:
 		RunE:         runRoot,
 	}
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "ralph.yaml", "config file")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ~/.config/ralph/config.yaml)")
 	rootCmd.Flags().BoolVarP(&rootOnce, "once", "1", false, "run only a single iteration")
 	rootCmd.Flags().IntVarP(&rootMaxIterations, "max-iterations", "n", 0, "maximum iterations (0 uses config)")
 	rootCmd.Flags().StringVarP(&rootParent, "parent", "p", "", "explicit parent task ID")

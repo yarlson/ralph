@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/viper"
 )
@@ -39,7 +40,20 @@ func LoadConfigWithFile(workDir, configFile string) (*Config, error) {
 	if configFile != "" {
 		return LoadConfigFromPath(configFile)
 	}
-	return LoadConfig(workDir)
+
+	localPath := filepath.Join(workDir, "ralph.yaml")
+	if _, err := os.Stat(localPath); err == nil {
+		return LoadConfig(workDir)
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	globalPath, err := GlobalConfigPath()
+	if err != nil {
+		return nil, err
+	}
+
+	return LoadConfigFromPath(globalPath)
 }
 
 // LoadConfig loads configuration from ralph.yaml in the given directory.
