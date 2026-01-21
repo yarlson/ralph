@@ -110,7 +110,7 @@ Flags (run `ralph --help` for the authoritative list):
 | `--parent`         | `-p`  | Explicit parent task ID                  |
 | `--branch`         | `-b`  | Git branch override                      |
 | `--dry-run`        |       | Show what would be done                  |
-| `--config`         |       | Config file path (default: `ralph.yaml`) |
+| `--config`         |       | Config file path (default: `~/.config/ralph/config.yaml` or `ralph.yaml`) |
 | `--provider`       |       | Provider: `claude` or `opencode`         |
 
 ### Status
@@ -148,7 +148,12 @@ ralph fix --force                              # Skip confirmations
 
 ## Configuration
 
-Ralph reads `ralph.yaml` from the repo root by default. If the file is missing, it uses sensible defaults. The configuration is intentionally minimal—most internal parameters (loop budgets, gutter detection, file paths) are hardcoded with reasonable defaults.
+Ralph looks for configuration in the following order:
+1. File specified by the `--config` flag
+2. `ralph.yaml` in the current repository root
+3. `~/.config/ralph/config.yaml` (or `$XDG_CONFIG_HOME/ralph/config.yaml`)
+
+If no configuration file is found, it uses sensible defaults. The configuration is intentionally minimal—most internal parameters (loop budgets, gutter detection, file paths) are hardcoded with reasonable defaults.
 
 ### Example
 
